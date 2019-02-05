@@ -11,7 +11,7 @@ Requires an access token for the github installation with appropriate permission
 
 ## Configuration
 
-When run through `pipenv` the app will pull config from the `.env` file, for which an example is provided...
+When run through `pipenv` the app will pull config from the `.env` file, for which an example is provided....
 ```bash
 FLASK_APP=issues.py
 FLASK_DEBUG=0
