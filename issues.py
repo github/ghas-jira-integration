@@ -80,6 +80,23 @@ def lgtm_webhook():
                 data=json.dumps({"state": transition}),
             )
 
+        elif transition == "suppress":
+
+            r = session.post(
+                "/".join([URL, str(issue_id), "labels"]),
+                data=json.dumps([SUPPRESSION_LABEL]),
+            )
+
+        elif transition == "unsuppress":
+
+            r = session.delete(
+                "/".join([URL, str(issue_id), "labels", SUPPRESSION_LABEL])
+            )
+
+            # if the label was not present on the issue, we don't let this worry us
+            if not r.ok and r.json().get("message") == "Label does not exist":
+                r.status_code = 200
+
         else:  # no matching transitions found
             return (
                 jsonify({"message": "unknown transition type - %s" % transition}),
