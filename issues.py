@@ -14,10 +14,13 @@ assert ACCESS_TOKEN != None
 KEY = os.getenv("LGTM_SECRET", "").encode("utf-8")
 assert KEY != "".encode("utf-8")
 
-headers = {
-    "content-type": "application/json",
-    "Authorization": "Bearer %s" % ACCESS_TOKEN,
-}
+
+session = requests.Session()
+session.headers.update(
+    {"content-type": "application/json", "Authorization": "Bearer %s" % ACCESS_TOKEN}
+)
+
+SUPPRESSION_LABEL = "wontfix"
 
 app = Flask(__name__)
 
@@ -36,8 +39,8 @@ def get_issue_dict(alert, project):
     return {"title": title, "body": "\n".join(lines), "labels": ["LGTM"]}
 
 
-@app.route("/", methods=["POST"])
-def issues_webhook():
+@app.route("/lgtm", methods=["POST"])
+def lgtm_webhook():
 
     if not app.debug:
 
@@ -55,34 +58,37 @@ def issues_webhook():
 
         data = get_issue_dict(json_dict.get("alert"), json_dict.get("project"))
 
-        r = requests.post(URL, data=json.dumps(data), headers=headers)
+        r = session.post(URL, data=json.dumps(data))
 
         issue_id = r.json()["number"]
 
-    else:
+    else:  # transition acts on exsiting ticket
 
-        if transition not in ["close", "reopen"]:
+        issue_id = json_dict.get("issue-id", None)
+
+        if issue_id is None:
+            return jsonify({"message": "no issue-id provided"}), 400
+
+        if transition in ["close", "reopen"]:
+
+            # handle a mistmatch between terminology on LGTM and Github
+            if transition == "reopen":
+                transition = "open"
+
+            r = session.patch(
+                os.path.sep.join([URL, str(issue_id)]),
+                data=json.dumps({"state": transition}),
+            )
+
+        else:  # no matching transitions found
             return (
                 jsonify({"message": "unknown transition type - %s" % transition}),
                 400,
             )
 
-        issue_id = json_dict.get("issue-id")
-
-        if issue_id is None:
-            return jsonify({"message": "no issue-id provided"}), 400
-
-        # handle a mistmatch between terminology on LGTM and Github
-        if transition == "reopen":
-            transition = "open"
-
-        r = requests.patch(
-            os.path.sep.join([URL, str(issue_id)]),
-            data=json.dumps({"state": transition}),
-            headers=headers,
+    if not r.ok:  # handle unknown error conditions by fowarding Github message
+        return app.response_class(
+            response=r.content, status=r.status_code, mimetype="application/json"
         )
-
-    if not r.ok:
-        return r.content, r.status_code
 
     return jsonify({"issue-id": issue_id}), r.status_code
