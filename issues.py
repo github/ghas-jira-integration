@@ -109,3 +109,39 @@ def lgtm_webhook():
         )
 
     return jsonify({"issue-id": issue_id}), r.status_code
+
+
+@app.route("/github", methods=["POST"])
+def github_webhook():
+
+    if not app.debug:
+
+        digest = hmac.new(KEY, request.data, "sha1").hexdigest()
+        sig_header = request.headers.get("X-Hub-Signature", "not-provided")
+
+        if not hmac.compare_digest(sig_header.split("=")[-1], digest):
+            return jsonify({"message": "Unauthorized"}), 401
+
+    json_dict = request.get_json()
+
+    action = json_dict.get("action")
+
+    if action not in ["labeled", "unlabeled"]:
+        return jsonify({"status": 200}), 200  # we don't care about other actions
+
+    label = json_dict.get("label")
+
+    if label["name"] != SUPPRESSION_LABEL:
+        return jsonify({"status": 200}), 200  # we don't care about other labels
+
+    translator = {"labeled": "suppress", "unlabeled": "unsuppress"}
+
+    payload = {
+        "issue-id": json_dict["issue"]["number"],
+        "transition": translator[action],
+    }
+
+    # placeholder for webhook request sent back to LGTM-E
+    print(json.dumps(payload))
+
+    return jsonify({"status": 200}), 200
