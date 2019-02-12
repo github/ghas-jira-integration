@@ -11,7 +11,7 @@ assert URL != None
 ACCESS_TOKEN = os.getenv("GIT_ACCESS_TOKEN")
 assert ACCESS_TOKEN != None
 
-KEY = os.getenv("LGTM_SECRET", "").encode("utf-8")
+KEY = os.getenv("SECRET", "").encode("utf-8")
 assert KEY != "".encode("utf-8")
 
 
