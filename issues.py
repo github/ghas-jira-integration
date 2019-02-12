@@ -1,6 +1,7 @@
 import os
 from flask import Flask, request, jsonify
 
+import time
 import requests
 import json
 import hmac
@@ -23,6 +24,21 @@ session.headers.update(
 SUPPRESSION_LABEL = "wontfix"
 
 app = Flask(__name__)
+
+
+class ChangeLock:
+    def __init__(self, duration):
+        self.times = dict()
+        self.duration = duration
+
+    def add(self, key):
+        self.times[key] = time.time() + self.duration
+
+    def __contains__(self, key):
+        return time.time() < self.times.get(key, float("-inf"))
+
+
+locked = ChangeLock(5)
 
 
 def get_issue_dict(alert, project):
@@ -108,6 +124,9 @@ def lgtm_webhook():
             response=r.content, status=r.status_code, mimetype="application/json"
         )
 
+    # if returning a successful response, then we set a timeout
+    locked.add(issue_id)
+
     return jsonify({"issue-id": issue_id}), r.status_code
 
 
@@ -134,12 +153,15 @@ def github_webhook():
     if label["name"] != SUPPRESSION_LABEL:
         return jsonify({"status": 200}), 200  # we don't care about other labels
 
+    issue_id = str(json_dict["issue"]["number"])
+
+    # when we were responsible for changing the tag, we don't want to pass the webhook back again
+    if issue_id in locked:
+        return jsonify({"status": 200}), 200
+
     translator = {"labeled": "suppress", "unlabeled": "unsuppress"}
 
-    payload = {
-        "issue-id": json_dict["issue"]["number"],
-        "transition": translator[action],
-    }
+    payload = {"issue-id": issue_id, "transition": translator[action]}
 
     # placeholder for webhook request sent back to LGTM-E
     print(json.dumps(payload))
