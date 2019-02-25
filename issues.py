@@ -63,6 +63,9 @@ def lgtm_webhook():
 
     transition = json_dict.get("transition")
 
+    # we deal with each transition type individually, showing the expected
+    # behaviour and response codes explicitly
+
     if transition == "create":
 
         data = get_issue_dict(json_dict.get("alert"), json_dict.get("project"))
@@ -71,61 +74,96 @@ def lgtm_webhook():
 
         issue_id = r.json()["number"]
 
-    else:  # transition acts on exsiting ticket
+        if r.ok:
+            return jsonify({"issue-id": issue_id}), 201
+        if r.status_code in [400]:
+            return jsonify({"error": r.status_code}), r.status_code
+        else:
+            return jsonify({"error": 500}), 500
 
-        issue_id = json_dict.get("issue-id", None)
+    # if not creating a ticket, there should be an issue_id defined
+    issue_id = json_dict.get("issue-id", None)
+    if issue_id is None:
+        return jsonify({"message": "no issue-id provided"}), 400
 
-        if issue_id is None:
-            return jsonify({"message": "no issue-id provided"}), 400
+    if transition == "close":
 
-        if transition in ["close", "reopen"]:
+        r = sess_github.patch(
+            os.path.sep.join([GITHUB_URL, str(issue_id)]),
+            data=json.dumps({"state": transition}),
+        )
+        if r.ok:
+            return jsonify({"issue-id": issue_id}), 200
+        if r.status_code == 404 and r.json()['message'] == "Not Found":
+            # if we were trying to close, we don't worry about not finding it
+            return jsonify({"issue-id": issue_id}), 200
+        else:
+            return jsonify({"error": 500}), 500
 
-            # handle a mistmatch between terminology on LGTM and Github
-            if transition == "reopen":
-                transition = "open"
+    if transition == "reopen":
 
-            r = sess_github.patch(
-                os.path.sep.join([GITHUB_URL, str(issue_id)]),
-                data=json.dumps({"state": transition}),
-            )
+        # handle a mistmatch between terminology on LGTM and Github
+        if transition == "reopen":
+            transition = "open"
 
-        elif transition == "suppress":
+        r = sess_github.patch(
+            os.path.sep.join([GITHUB_URL, str(issue_id)]),
+            data=json.dumps({"state": transition}),
+        )
+        if r.ok:
+            return jsonify({"issue-id": issue_id}), 200
+        if r.status_code == 404 and r.json()['message'] == "Not Found":
+            # code 410 indicates to LGTM that the issue needs to be recreated
+            return jsonify({"issue-id": issue_id}), 410
+        else:
+            return jsonify({"error": 500}), 500
 
-            r = sess_github.post(
-                "/".join([GITHUB_URL, str(issue_id), "labels"]),
-                data=json.dumps([SUPPRESSION_LABEL]),
-            )
+    if transition == "suppress":
 
-        elif transition == "unsuppress":
+        r = sess_github.post(
+            "/".join([GITHUB_URL, str(issue_id), "labels"]),
+            data=json.dumps([SUPPRESSION_LABEL]),
+        )
+        if r.ok:
+            return jsonify({"issue-id": issue_id}), 200
+        if r.status_code == 404 and r.json()['message'] == "Not Found":
+            # if we were trying to suppress, we don't worry about not finding it
+            return jsonify({"issue-id": issue_id}), 200
+        else:
+            return jsonify({"error": 500}), 500
 
-            r = sess_github.delete(
-                "/".join([GITHUB_URL, str(issue_id), "labels", SUPPRESSION_LABEL])
-            )
+    if transition == "unsuppress":
 
-            # if the label was not present on the issue, we don't let this worry us
-            if not r.ok and r.json().get("message") == "Label does not exist":
-                r.status_code = 200
-
-            if r.ok:
-                # given a suppression comment has just been removed on LGTM
-                # we ensure that the ticket is open in the issue tracker
-                r = sess_github.patch(
-                    os.path.sep.join([GITHUB_URL, str(issue_id)]),
-                    data=json.dumps({"state": "open"}),
-                )
-
-        else:  # no matching transitions found
-            return (
-                jsonify({"message": "unknown transition type - %s" % transition}),
-                400,
-            )
-
-    if not r.ok:  # handle unknown error conditions by fowarding Github message
-        return app.response_class(
-            response=r.content, status=r.status_code, mimetype="application/json"
+        r = sess_github.delete(
+            "/".join([GITHUB_URL, str(issue_id), "labels", SUPPRESSION_LABEL])
         )
 
-    return jsonify({"issue-id": issue_id}), r.status_code
+        # if the label was not present on the issue, we don't let this worry us
+        if not r.ok and r.json().get("message") == "Label does not exist":
+            r.status_code = 200
+
+        if r.ok:
+            # given a suppression comment has just been removed on LGTM
+            # we ensure that the ticket is open in the issue tracker
+            r = sess_github.patch(
+                os.path.sep.join([GITHUB_URL, str(issue_id)]),
+                data=json.dumps({"state": "open"}),
+            )
+
+        if r.ok:
+            return jsonify({"issue-id": issue_id}), 200
+        if r.status_code == 404 and r.json()['message'] == "Not Found":
+            # code 410 indicates to LGTM that the issue needs to be recreated
+            return jsonify({"issue-id": issue_id}), 410
+        else:
+            return jsonify({"error": 500}), 500
+
+    return (jsonify({"message": "unknown transition type - %s" % transition}), 400)
+
+    # if not r.ok:  # handle unknown error conditions by fowarding Github message
+    #     return app.response_class(
+    #         response=r.content, status=r.status_code, mimetype="application/json"
+    #     )
 
 
 @app.route("/github", methods=["POST"])
@@ -154,7 +192,7 @@ def github_webhook():
     issue_id = str(json_dict["issue"]["number"])
 
     # When we were responsible for changing the tag, we don't want to pass the webhook back again.
-    if json_dict['sender']['login'] == GITHUB_BOT_USERNAME:
+    if json_dict["sender"]["login"] == GITHUB_BOT_USERNAME:
         return jsonify({"status": 200}), 200
 
     translator = {"labeled": "suppress", "unlabeled": "unsuppress"}
