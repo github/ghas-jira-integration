@@ -118,6 +118,14 @@ def lgtm_webhook():
             if not r.ok and r.json().get("message") == "Label does not exist":
                 r.status_code = 200
 
+            if r.ok:
+                # given a suppression comment has just been removed on LGTM
+                # we ensure that the ticket is open in the issue tracker
+                r = sess_github.patch(
+                    os.path.sep.join([GITHUB_URL, str(issue_id)]),
+                    data=json.dumps({"state": "open"}),
+                )
+
         else:  # no matching transitions found
             return (
                 jsonify({"message": "unknown transition type - %s" % transition}),
