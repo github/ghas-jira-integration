@@ -12,6 +12,9 @@ assert LGTM_URL != None
 GITHUB_URL = os.getenv("GIT_REPO_URL")
 assert GITHUB_URL != None
 
+GITHUB_BOT_USERNAME = os.getenv("GIT_BOT_USERNAME")
+assert GITHUB_BOT_USERNAME != None
+
 GITHUB_TOKEN = os.getenv("GIT_ACCESS_TOKEN")
 assert GITHUB_TOKEN != None
 
@@ -29,21 +32,6 @@ sess_lgtm.headers.update({"content-type": "application/json; charset=utf-8"})
 SUPPRESSION_LABEL = "wontfix"
 
 app = Flask(__name__)
-
-
-class ChangeLock:
-    def __init__(self, duration):
-        self.times = dict()
-        self.duration = duration
-
-    def add(self, key):
-        self.times[key] = time.time() + self.duration
-
-    def __contains__(self, key):
-        return time.time() < self.times.get(key, float("-inf"))
-
-
-locked = ChangeLock(5)
 
 
 def get_issue_dict(alert, project):
@@ -137,9 +125,6 @@ def lgtm_webhook():
             response=r.content, status=r.status_code, mimetype="application/json"
         )
 
-    # if returning a successful response, then we set a timeout
-    locked.add(issue_id)
-
     return jsonify({"issue-id": issue_id}), r.status_code
 
 
@@ -169,8 +154,7 @@ def github_webhook():
     issue_id = str(json_dict["issue"]["number"])
 
     # When we were responsible for changing the tag, we don't want to pass the webhook back again.
-    # In a production system a more robust solution could involve a dedicated LGTM bot account.
-    if issue_id in locked:
+    if json_dict['sender']['login'] == GITHUB_BOT_USERNAME:
         return jsonify({"status": 200}), 200
 
     translator = {"labeled": "suppress", "unlabeled": "unsuppress"}
