@@ -6,20 +6,25 @@ import requests
 import json
 import hmac
 
-URL = os.getenv("GIT_REPO_URL")
-assert URL != None
+LGTM_URL = os.getenv("LGTM_WEBHOOK_URL")
+assert LGTM_URL != None
 
-ACCESS_TOKEN = os.getenv("GIT_ACCESS_TOKEN")
-assert ACCESS_TOKEN != None
+GITHUB_URL = os.getenv("GIT_REPO_URL")
+assert GITHUB_URL != None
+
+GITHUB_TOKEN = os.getenv("GIT_ACCESS_TOKEN")
+assert GITHUB_TOKEN != None
 
 KEY = os.getenv("SECRET", "").encode("utf-8")
 assert KEY != "".encode("utf-8")
 
-
-session = requests.Session()
-session.headers.update(
-    {"content-type": "application/json", "Authorization": "Bearer %s" % ACCESS_TOKEN}
+sess_github = requests.Session()
+sess_github.headers.update(
+    {"content-type": "application/json", "Authorization": "Bearer %s" % GITHUB_TOKEN}
 )
+
+sess_lgtm = requests.Session()
+sess_lgtm.headers.update({"content-type": "application/json; charset=utf-8"})
 
 SUPPRESSION_LABEL = "wontfix"
 
@@ -74,7 +79,7 @@ def lgtm_webhook():
 
         data = get_issue_dict(json_dict.get("alert"), json_dict.get("project"))
 
-        r = session.post(URL, data=json.dumps(data))
+        r = sess_github.post(GITHUB_URL, data=json.dumps(data))
 
         issue_id = r.json()["number"]
 
@@ -91,22 +96,22 @@ def lgtm_webhook():
             if transition == "reopen":
                 transition = "open"
 
-            r = session.patch(
-                os.path.sep.join([URL, str(issue_id)]),
+            r = sess_github.patch(
+                os.path.sep.join([GITHUB_URL, str(issue_id)]),
                 data=json.dumps({"state": transition}),
             )
 
         elif transition == "suppress":
 
-            r = session.post(
-                "/".join([URL, str(issue_id), "labels"]),
+            r = sess_github.post(
+                "/".join([GITHUB_URL, str(issue_id), "labels"]),
                 data=json.dumps([SUPPRESSION_LABEL]),
             )
 
         elif transition == "unsuppress":
 
-            r = session.delete(
-                "/".join([URL, str(issue_id), "labels", SUPPRESSION_LABEL])
+            r = sess_github.delete(
+                "/".join([GITHUB_URL, str(issue_id), "labels", SUPPRESSION_LABEL])
             )
 
             # if the label was not present on the issue, we don't let this worry us
@@ -155,15 +160,25 @@ def github_webhook():
 
     issue_id = str(json_dict["issue"]["number"])
 
-    # when we were responsible for changing the tag, we don't want to pass the webhook back again
+    # When we were responsible for changing the tag, we don't want to pass the webhook back again.
+    # In a production system a more robust solution could involve a dedicated LGTM bot account.
     if issue_id in locked:
         return jsonify({"status": 200}), 200
 
     translator = {"labeled": "suppress", "unlabeled": "unsuppress"}
 
-    payload = {"issue-id": issue_id, "transition": translator[action]}
+    payload = json.dumps({"issue-id": issue_id, "transition": translator[action]})
 
-    # placeholder for webhook request sent back to LGTM-E
-    print(json.dumps(payload))
+    headers = {
+        "X-LGTM-Signature": hmac.new(KEY, payload.encode("utf-8"), "sha1").hexdigest()
+    }
+
+    r = sess_lgtm.post(LGTM_URL, data=payload, headers=headers)
+
+    if not r.ok:
+        return (
+            jsonify({"error": "ticket not found for id = " + issue_id}),
+            r.status_code,
+        )
 
     return jsonify({"status": 200}), 200
