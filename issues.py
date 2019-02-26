@@ -1,7 +1,6 @@
 import os
 from flask import Flask, request, jsonify
 
-import time
 import requests
 import json
 import hmac
@@ -169,12 +168,12 @@ def github_webhook():
     action = json_dict.get("action")
 
     if action not in ["labeled", "unlabeled"]:
-        return jsonify({"status": 200}), 200  # we don't care about other actions
+        return jsonify({"status": 200}), 200
 
-    label = json_dict.get("label")
+    label = json_dict.get("label", {})
 
-    if label["name"] != SUPPRESSION_LABEL:
-        return jsonify({"status": 200}), 200  # we don't care about other labels
+    if label.get("name", "") != SUPPRESSION_LABEL:
+        return jsonify({"status": 200}), 200
 
     issue_id = str(json_dict["issue"]["number"])
 
@@ -192,10 +191,7 @@ def github_webhook():
 
     r = sess_lgtm.post(LGTM_URL, data=payload, headers=headers)
 
-    if not r.ok:
-        return (
-            jsonify({"error": "ticket not found for id = " + issue_id}),
-            r.status_code,
-        )
-
-    return jsonify({"status": 200}), 200
+    if r.ok:
+        return jsonify({"status": 200}), 200
+    else:
+        jsonify({"error": r.status_code}), r.status_code
