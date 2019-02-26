@@ -35,6 +35,7 @@ app = Flask(__name__)
 
 
 def get_issue_dict(alert, project):
+    """Generate payload for creating ticket in GitHub Issues"""
 
     title = "%s (%s)" % (alert["query"]["name"], project["name"])
 
@@ -48,16 +49,21 @@ def get_issue_dict(alert, project):
     return {"title": title, "body": "\n".join(lines), "labels": ["LGTM"]}
 
 
+def auth_is_valid(signature):
+    if app.debug:
+        return True
+
+    return hmac.compare_digest(
+        signature, hmac.new(KEY, request.data, "sha1").hexdigest()
+    )
+
+
 @app.route("/lgtm", methods=["POST"])
 def lgtm_webhook():
+    """Handle POST requests coming from LGTM, and pass a translated request to GitHub"""
 
-    if not app.debug:
-
-        digest = hmac.new(KEY, request.data, "sha1").hexdigest()
-        signature = request.headers.get("X-LGTM-Signature", "not-provided")
-
-        if not hmac.compare_digest(signature, digest):
-            return jsonify({"message": "Unauthorized"}), 401
+    if not auth_is_valid(request.headers.get("X-LGTM-Signature", "not-provided")):
+        return jsonify({"message": "Unauthorized"}), 403
 
     json_dict = request.get_json()
 
@@ -72,12 +78,8 @@ def lgtm_webhook():
 
         r = sess_github.post(GITHUB_URL, data=json.dumps(data))
 
-        issue_id = r.json()["number"]
-
         if r.ok:
-            return jsonify({"issue-id": issue_id}), 201
-        if r.status_code in [400]:
-            return jsonify({"error": r.status_code}), r.status_code
+            return jsonify({"issue-id": r.json()["number"]}), 201
         else:
             return jsonify({"error": 500}), 500
 
@@ -89,12 +91,11 @@ def lgtm_webhook():
     if transition == "close":
 
         r = sess_github.patch(
-            os.path.sep.join([GITHUB_URL, str(issue_id)]),
-            data=json.dumps({"state": transition}),
+            GITHUB_URL + "/" + str(issue_id), data=json.dumps({"state": transition})
         )
         if r.ok:
             return jsonify({"issue-id": issue_id}), 200
-        if r.status_code == 404 and r.json()['message'] == "Not Found":
+        if r.status_code == 404 and r.json()["message"] == "Not Found":
             # if we were trying to close, we don't worry about not finding it
             return jsonify({"issue-id": issue_id}), 200
         else:
@@ -102,31 +103,26 @@ def lgtm_webhook():
 
     if transition == "reopen":
 
-        # handle a mistmatch between terminology on LGTM and Github
-        if transition == "reopen":
-            transition = "open"
-
         r = sess_github.patch(
-            os.path.sep.join([GITHUB_URL, str(issue_id)]),
-            data=json.dumps({"state": transition}),
+            GITHUB_URL + "/" + str(issue_id), data=json.dumps({"state": "open"})
         )
         if r.ok:
             return jsonify({"issue-id": issue_id}), 200
-        if r.status_code == 404 and r.json()['message'] == "Not Found":
-            # code 410 indicates to LGTM that the issue needs to be recreated
-            return jsonify({"issue-id": issue_id}), 410
+        if r.status_code == 404 and r.json()["message"] == "Not Found":
+            # using 410 we indicate to LGTM that the issue needs to be recreated
+            return jsonify({"error": "gone"}), 410
         else:
             return jsonify({"error": 500}), 500
 
     if transition == "suppress":
 
         r = sess_github.post(
-            "/".join([GITHUB_URL, str(issue_id), "labels"]),
+            GITHUB_URL + "/" + str(issue_id) + "/" + "labels",
             data=json.dumps([SUPPRESSION_LABEL]),
         )
         if r.ok:
             return jsonify({"issue-id": issue_id}), 200
-        if r.status_code == 404 and r.json()['message'] == "Not Found":
+        if r.status_code == 404 and r.json()["message"] == "Not Found":
             # if we were trying to suppress, we don't worry about not finding it
             return jsonify({"issue-id": issue_id}), 200
         else:
@@ -142,40 +138,31 @@ def lgtm_webhook():
         if not r.ok and r.json().get("message") == "Label does not exist":
             r.status_code = 200
 
-        if r.ok:
-            # given a suppression comment has just been removed on LGTM
-            # we ensure that the ticket is open in the issue tracker
+        if r.ok:  # we ensure that the ticket is open in the issue tracker
             r = sess_github.patch(
-                os.path.sep.join([GITHUB_URL, str(issue_id)]),
-                data=json.dumps({"state": "open"}),
+                GITHUB_URL + "/" + str(issue_id), data=json.dumps({"state": "open"})
             )
 
         if r.ok:
             return jsonify({"issue-id": issue_id}), 200
-        if r.status_code == 404 and r.json()['message'] == "Not Found":
-            # code 410 indicates to LGTM that the issue needs to be recreated
-            return jsonify({"issue-id": issue_id}), 410
+        if r.status_code == 404 and r.json()["message"] == "Not Found":
+            # using 410 we indicate to LGTM that the issue needs to be recreated
+            return jsonify({"error": "gone"}), 410
         else:
             return jsonify({"error": 500}), 500
 
+    # when the transition is not recognised, we return a bad request response
     return (jsonify({"message": "unknown transition type - %s" % transition}), 400)
-
-    # if not r.ok:  # handle unknown error conditions by fowarding Github message
-    #     return app.response_class(
-    #         response=r.content, status=r.status_code, mimetype="application/json"
-    #     )
 
 
 @app.route("/github", methods=["POST"])
 def github_webhook():
+    """Handle POST requests coming from GitHub, and pass a translated request to LGTM"""
 
-    if not app.debug:
-
-        digest = hmac.new(KEY, request.data, "sha1").hexdigest()
-        sig_header = request.headers.get("X-Hub-Signature", "not-provided")
-
-        if not hmac.compare_digest(sig_header.split("=")[-1], digest):
-            return jsonify({"message": "Unauthorized"}), 401
+    if not auth_is_valid(
+        request.headers.get("X-Hub-Signature", "not-provided").split("=")[-1]
+    ):
+        return jsonify({"message": "Unauthorized"}), 403
 
     json_dict = request.get_json()
 
