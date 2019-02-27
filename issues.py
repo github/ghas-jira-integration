@@ -77,8 +77,17 @@ def lgtm_webhook():
 
         r = sess_github.post(GITHUB_URL, data=json.dumps(data))
 
+        issue_id = str(r.json().get("number", None))
+
+        # mark ticket as suppressed if needed
+        if r.ok and json_dict.get("alert").get("suppressed", False):
+            r = sess_github.post(
+                GITHUB_URL + "/" + issue_id + "/" + "labels",
+                data=json.dumps([SUPPRESSION_LABEL]),
+            )
+
         if r.ok:
-            return jsonify({"issue-id": r.json()["number"]}), 201
+            return jsonify({"issue-id": issue_id}), 201
         else:
             return jsonify({"error": 500}), 500
 
