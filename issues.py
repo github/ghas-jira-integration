@@ -26,7 +26,7 @@ sess_github.headers.update(
 )
 
 sess_lgtm = requests.Session()
-sess_lgtm.headers.update({"content-type": "application/json; charset=utf-8"})
+sess_lgtm.headers.update({"content-type": "application/json"})
 
 SUPPRESSION_LABEL = "wontfix"
 
@@ -62,7 +62,7 @@ def lgtm_webhook():
     """Handle POST requests coming from LGTM, and pass a translated request to GitHub"""
 
     if not auth_is_valid(request.headers.get("X-LGTM-Signature", "not-provided")):
-        return jsonify({"message": "Unauthorized"}), 403
+        return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
     json_dict = request.get_json()
 
@@ -89,12 +89,12 @@ def lgtm_webhook():
         if r.ok:
             return jsonify({"issue-id": issue_id}), 201
         else:
-            return jsonify({"error": 500}), 500
+            return jsonify({"code": 500, "error": "Internal server error"}), 500
 
     # if not creating a ticket, there should be an issue_id defined
     issue_id = json_dict.get("issue-id", None)
     if issue_id is None:
-        return jsonify({"message": "no issue-id provided"}), 400
+        return jsonify({"code": 400, "error": "No issue-id provided"}), 400
 
     if transition == "close":
 
@@ -107,7 +107,7 @@ def lgtm_webhook():
             # if we were trying to close, we don't worry about not finding it
             return jsonify({"issue-id": issue_id}), 200
         else:
-            return jsonify({"error": 500}), 500
+            return jsonify({"code": 500, "error": "Internal server error"}), 500
 
     if transition == "reopen":
 
@@ -118,9 +118,9 @@ def lgtm_webhook():
             return jsonify({"issue-id": issue_id}), 200
         if r.status_code == 404 and r.json()["message"] == "Not Found":
             # using 410 we indicate to LGTM that the issue needs to be recreated
-            return jsonify({"error": "gone"}), 410
+            return jsonify({"code": 410, "error": "Ticket has been removed."}), 410
         else:
-            return jsonify({"error": 500}), 500
+            return jsonify({"code": 500, "error": "Internal server error"}), 500
 
     if transition == "suppress":
 
@@ -134,7 +134,7 @@ def lgtm_webhook():
             # if we were trying to suppress, we don't worry about not finding it
             return jsonify({"issue-id": issue_id}), 200
         else:
-            return jsonify({"error": 500}), 500
+            return jsonify({"code": 500, "error": "Internal server error"}), 500
 
     if transition == "unsuppress":
 
@@ -155,12 +155,15 @@ def lgtm_webhook():
             return jsonify({"issue-id": issue_id}), 200
         if r.status_code == 404 and r.json()["message"] == "Not Found":
             # using 410 we indicate to LGTM that the issue needs to be recreated
-            return jsonify({"error": "gone"}), 410
+            return jsonify({"code": 410, "error": "Ticket has been removed."}), 410
         else:
-            return jsonify({"error": 500}), 500
+            return jsonify({"code": 500, "error": "Internal server error"}), 500
 
     # when the transition is not recognised, we return a bad request response
-    return (jsonify({"message": "unknown transition type - %s" % transition}), 400)
+    return (
+        jsonify({"code": 400, "error": "unknown transition type - %s" % transition}),
+        400,
+    )
 
 
 @app.route("/github", methods=["POST"])
@@ -170,7 +173,7 @@ def github_webhook():
     if not auth_is_valid(
         request.headers.get("X-Hub-Signature", "not-provided").split("=")[-1]
     ):
-        return jsonify({"message": "Unauthorized"}), 403
+        return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
     json_dict = request.get_json()
 
@@ -203,4 +206,6 @@ def github_webhook():
     if r.ok:
         return jsonify({"status": 200}), 200
     else:
-        jsonify({"error": r.status_code}), r.status_code
+        return app.response_class(
+            response=r.content, status=r.status_code, mimetype="application/json"
+        )
