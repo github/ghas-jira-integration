@@ -33,6 +33,11 @@ SUPPRESSION_LABEL = "wontfix"
 app = Flask(__name__)
 
 
+@app.route("/", methods=["POST"])
+def default():
+    return jsonify({"message": "success"}), 200
+
+
 def get_issue_dict(alert, project):
     """Generate payload for creating ticket in GitHub Issues"""
 
@@ -45,7 +50,12 @@ def get_issue_dict(alert, project):
     lines.append("> " + "\n> ".join(alert["message"].split("\n")))
     lines.append("[View alert on LGTM](%s)" % alert["url"])
 
-    return {"title": title, "body": "\n".join(lines), "labels": ["LGTM"]}
+    labels = ["LGTM"]
+
+    if alert.get("suppressed"):
+        labels.append(SUPPRESSION_LABEL)
+
+    return {"title": title, "body": "\n".join(lines), "labels": labels}
 
 
 def auth_is_valid(signature):
@@ -78,13 +88,6 @@ def lgtm_webhook():
         r = sess_github.post(GITHUB_URL, data=json.dumps(data))
 
         issue_id = str(r.json().get("number", None))
-
-        # mark ticket as suppressed if needed
-        if r.ok and json_dict.get("alert").get("suppressed", False):
-            r = sess_github.post(
-                GITHUB_URL + "/" + issue_id + "/" + "labels",
-                data=json.dumps([SUPPRESSION_LABEL]),
-            )
 
         if r.ok:
             return jsonify({"issue-id": issue_id}), 201
