@@ -33,11 +33,6 @@ SUPPRESSION_LABEL = "wontfix"
 app = Flask(__name__)
 
 
-@app.route("/", methods=["POST"])
-def default():
-    return jsonify({"message": "success"}), 200
-
-
 def get_issue_dict(alert, project):
     """Generate payload for creating ticket in GitHub Issues"""
 
