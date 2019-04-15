@@ -1,6 +1,14 @@
 # LGTM Issue Tracker Example
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black) [![Total alerts](https://img.shields.io/lgtm/alerts/g/Semmle/lgtm-issue-tracker-example.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/Semmle/lgtm-issue-tracker-example/alerts/)
 
+## Issue tracking in LGTM Enterprise
+
+[LGTM Enterprise](https://semmle.com/lgtm) gives customers the option to export alerts to any issue tracker, sending webhook POST requests to the external service. Semmle provides an existing full-featured [add-on for Atlassian Jira](https://github.com/Semmle/lgtm-jira-addon), but other issue trackers will necessitate a light-weight application to act as translator with LGTM. This repo provides a basic example of how such an application might be implemented.
+
+Integration with external issue trackers is not available to users of [LGTM.com](https://lgtm.com).
+
+## This repository
+
 This project gives a quick illustrative example showing how to integrate LGTM Enterprise with a 3rd-party issue tracker. This code is intended as a proof-of-concept only, showing the basic operations necessary to handle incoming requests from LGTM. It is not intended for production use. Please feel free to use this as a starting point for your own integration, but if you are using Atlassian Jira see also the [LGTM Jira Add-on](https://github.com/Semmle/lgtm-jira-addon).
 
 We use a lightweight `Flask` server to handle incoming requests, which in turn writes to the issue tracker of a specified Github repository. When not run in debug mode, incoming requests are verified using the secret specified when configuring the integration. For a more detailed explanation please see the associated [tutorial](tutorial.md).
