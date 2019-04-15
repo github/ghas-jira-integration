@@ -6,6 +6,7 @@ verify_ssl = true
 [packages]
 flask = "*"
 requests = "*"
+jinja2 = ">=2.10.1"
 
 [requires]
 python_version = "3.5"
