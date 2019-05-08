@@ -27,7 +27,7 @@ def issues_webhook():
 if __name__ == "__main__":
     app.run()
 ```
-Using the built-in WSGI development server that comes with Flask, this application can be run by simply saving the code to a file and executing as follows.
+Using the built-in WSGI development server that comes with Flask, this application can be run by simply saving the code to a file and executing it as follows.
 ```bash
 python flask_testing.py
 ```
@@ -176,7 +176,7 @@ if transition == 'close':
 
     return jsonify({'issue-id': issue_id}), r.status_code
 ```
-When reopening a ticket, the request will be of the same form, except with the transition `reopen`. This can be handled similary, with Github expecting the state to be given as `open`.
+When reopening a ticket, the request will be of the same form, except with the transition `reopen`. This can be handled in a similar way to closing a ticket, but with Github expecting the state to be given as `open`.
 ```python
 if transition == 'create':
    ########
@@ -195,7 +195,7 @@ if transition == 'reopen':
 
 ### Authorization
 
-When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for PR integrations, documentation for which can be viewed in LGTM's [verify-callback-signature documentation](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature). Verification of the incoming requests can therefore be easily achieved as follows.
+When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for pull request integrations, documentation for which can be viewed in LGTM's [verify-callback-signature documentation](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature). Verification of the incoming requests can therefore be easily achieved as follows.
 
 ```python
 import hmac
