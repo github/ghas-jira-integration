@@ -27,7 +27,7 @@ def issues_webhook():
 if __name__ == "__main__":
     app.run()
 ```
-Using the built-in WSGI development server that comes with Flask, this application can be run by simply executing the python file.
+Using the built-in WSGI development server that comes with Flask, this application can be run by simply saving the code to a file and executing it as follows.
 ```bash
 python flask_testing.py
 ```
@@ -35,10 +35,14 @@ When successfully exectued, a service will be operating on localhost:5000 that w
 
 ## Format of webhook request
 
-All requests from LGTM to the specified webhook endpoint are of HTTP method POST, and they fall into three categories.
+All requests from LGTM to the specified webhook endpoint are of HTTP method POST, and they fall into five categories.
 - `create`
 - `close`
 - `reopen`
+- `suppress`
+- `unsuppress`
+
+For this tutorial we will focus just on the basic operations of opening and closing tickets.
 
 ### Creating a new ticket
 
@@ -158,22 +162,13 @@ When closing an existing ticket, LGTM will send a request of the form...
     "transition": "close"
 }
 ```
-When reopening a ticket, the request will be of the form...
-```json
-{
-	"issue-id": external_issue_id,
-    "transition": "reopen"
-}
-```
-The Github API expects state to be specified as either `open` or `close`, so we first make sure that our terminology matches that expected by Github, and then send a simple `PATCH` request to the appropriate resource endpoint.
+This can be handled by sending a `PATCH` request to the existing Github issue.
 ```python
 if transition == 'create':
    ########
-else:
-    issue_id = json_dict.get('issue-id')
+if transition == 'close':
 
-    if transition == 'reopen':
-        transition = 'open'
+    issue_id = json_dict.get('issue-id')
 
     r = requests.patch(URL + '/' + issue_id,
                         json={"state": transition},
@@ -181,10 +176,26 @@ else:
 
     return jsonify({'issue-id': issue_id}), r.status_code
 ```
+When reopening a ticket, the request will be of the same form, except with the transition `reopen`. This can be handled in a similar way to closing a ticket, but with Github expecting the state to be given as `open`.
+```python
+if transition == 'create':
+   ########
+if transition == 'close':
+   ########
+if transition == 'reopen':
+
+    issue_id = json_dict.get('issue-id')
+
+    r = requests.patch(URL + '/' + issue_id,
+                        json={"state": 'open'}, # github expects `open`
+                        headers=HEADERS)
+
+    return jsonify({'issue-id': issue_id}), r.status_code
+```
 
 ### Authorization
 
-When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for the PR integrations, as already detailed elsewhere in [verify-callback-signature documentaition](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature). Verification of the incoming requests can therefore be easily achieved as follows.
+When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for pull request integrations, documentation for which can be viewed in LGTM's [verify-callback-signature documentation](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature). Verification of the incoming requests can therefore be easily achieved as follows.
 
 ```python
 import hmac
@@ -251,12 +262,9 @@ def issues_webhook():
 
         return jsonify({'issue-id': issue_id}), r.status_code
 
-    else:
+    if transition == 'close':
 
         issue_id = json_dict.get('issue-id')
-
-        if transition == 'reopen':
-            transition = 'open'
 
         r = requests.patch(URL + '/' + issue_id,
                             json={"state": transition},
@@ -264,6 +272,22 @@ def issues_webhook():
 
         return jsonify({'issue-id': issue_id}), r.status_code
 
+    if transition == 'reopen':
+
+        issue_id = json_dict.get('issue-id')
+
+        r = requests.patch(URL + '/' + issue_id,
+                            json={"state": 'open'}, # github expects `open`
+                            headers=HEADERS)
+
+        return jsonify({'issue-id': issue_id}), r.status_code
+
+    # this example only supports the above three transition types
+    # if transition is unmatched we return an error response
+    return (
+        jsonify({"code": 400, "error": "unknown transition type - %s" % transition}),
+        400,
+    )
 
 if __name__ == "__main__":
     app.run()
