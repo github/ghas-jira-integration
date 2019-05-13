@@ -1,9 +1,9 @@
 
-# Integrating a 3rd-party issue tracker with LGTM
+# Integrating a third-party issue tracker with LGTM
 
-To enable the creation of tickets in 3rd-party issue trackers, LGTM Enterprise offers a lightweight webhook integration. When enabled this will send outgoing POST requests to a specified endpoint, detailing new and changed alerts.
+To enable the creation of tickets in third-party issue trackers, LGTM Enterprise offers a lightweight webhook integration. When enabled, this will send outgoing POST requests to a specified endpoint, detailing new and changed alerts.
 
-We are going to outline a barebones implementation of a webapp that will process incoming requests from LGTM Enterprise, create issues in a specified Github repository and pass an appropriate response back to LGTM. We will implement our example for python 3.5+ and use two 3rd-party modules, `Flask` (a micro web framework) and `requests` (a user-friendly HTTP library). Both are extremely widely used and can be easily installed using `pip`.
+We are going to outline a barebones implementation of a webapp that will process incoming requests from LGTM Enterprise, create issues in a specified GitHub repository and pass an appropriate response back to LGTM. We will implement our example for Python 3.5+ and use two third-party modules, `Flask` (a micro web framework) and `requests` (a user-friendly HTTP library). Both are extremely widely used and can be easily installed using `pip`.
 ```bash
 pip install flask
 pip install requests
@@ -27,15 +27,15 @@ def issues_webhook():
 if __name__ == "__main__":
     app.run()
 ```
-Using the built-in WSGI development server that comes with Flask, this application can be run by simply saving the code to a file and executing it as follows.
+Let's assume you've saved this file as `flask_testing.py`. Using the built-in WSGI development server that comes with Flask, you can run the application by simply executing the Python file.
 ```bash
 python flask_testing.py
 ```
-When successfully exectued, a service will be operating on localhost:5000 that will echo all POSTed JSON.
+When successfully executed, a service will be operating on localhost:5000 that will echo all POSTed JSON.
 
 ## Format of webhook request
 
-All requests from LGTM to the specified webhook endpoint are of HTTP method POST, and they fall into five categories.
+All requests from LGTM to the specified webhook endpoint are of the HTTP method POST, and they fall into three categories.
 - `create`
 - `close`
 - `reopen`
@@ -72,7 +72,7 @@ With Flask, the payload of an incoming request can be accessed using the followi
 ```python
 json_dict = request.get_json()
 ```
-The Github API expects JSON with fields `title`, `body` and `labels`, and the body of the ticket can be formatted as markdown. For our example application, the following function takes `alert` and `project` from the LGTM payload and creates a dictionary that can be JSON serialized and then sent on to the correct Github endpoint. In this case we choose to just apply the single default label `LGTM` to all tickets.
+The GitHub API expects JSON with fields `title`, `body` and `labels`, and the body of the ticket can be formatted as markdown. For our example application, the following function takes `alert` and `project` from the LGTM payload and creates a dictionary that can be JSON serialized and then sent on to the correct GitHub endpoint. In this case we choose to just apply the single default label `LGTM` to all tickets.
 
 ```python
 def get_issue_dict(alert, project):
@@ -89,7 +89,7 @@ def get_issue_dict(alert, project):
     return {"title": title, "body": "\n".join(lines), "labels": ["LGTM"]}
 ```
 
-To interact with the Github API we use the `requests` module, and define the following details for the target Github repository, pulling the access token from an environment variable.
+To interact with the GitHub API we use the `requests` module, and define the following details for the target GitHub repository, pulling the access token from an environment variable.
 ```python
 URL     = 'https://github.com/api/v3/repos/user/repo/issues'
 HEADERS = {'content-type': 'application/json',
@@ -104,7 +104,7 @@ LGTM expects a 2XX HTTP response of the form shown below, where the `issue_id` p
 }
 ```
 
-Putting all of this together, in order to handle incoming `create` requests our example app becomes...
+Putting all of this together, to allow it to handle incoming `create` requests, our example app becomes:
 
 ```python
 import os
@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
 ### Changing an existing ticket
 
-When closing an existing ticket, LGTM will send a request of the form...
+When closing an existing ticket, LGTM sends a request of the form:
 
 ```json
 {
@@ -195,7 +195,7 @@ if transition == 'reopen':
 
 ### Authorization
 
-When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for pull request integrations, documentation for which can be viewed in LGTM's [verify-callback-signature documentation](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature). Verification of the incoming requests can therefore be easily achieved as follows.
+When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for pull request integrations—for more information, see [verify-callback-signature](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature) in the LGTM help. Verification of the incoming requests can therefore be easily achieved as follows.
 
 ```python
 import hmac
@@ -211,7 +211,7 @@ if not hmac.compare_digest(signature, digest):
 
 ## Full example
 
-Finally, putting all these piece together we have the following example Flask app, which will handle webhook requests from the LGTM issue tracker integration, and create tickets in the issue tracker of a specified Github repository.
+Finally, putting all these pieces together, we have the following example Flask app, which handles webhook requests from the LGTM issue tracker integration, and creates tickets in the issue tracker of a specified GitHub repository.
 
 ```python
 import os
