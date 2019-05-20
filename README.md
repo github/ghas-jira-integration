@@ -46,4 +46,5 @@ We welcome contributions to our example LGTM issue tracker integration. While we
 
 ## License
 
-The LGTM Jira add-on is licensed under [Apache License 2.0](LICENSE) by [Semmle](https://semmle.com).
+The LGTM issue tracker integration example is licensed under [Apache License 2.0](LICENSE) by [Semmle](https://semmle.com).
+
