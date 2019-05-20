@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 
 import requests
 import json
+import hashlib
 import hmac
 
 LGTM_URL = os.getenv("LGTM_WEBHOOK_URL")
@@ -58,7 +59,7 @@ def auth_is_valid(signature):
         return True
 
     return hmac.compare_digest(
-        signature, hmac.new(KEY, request.data, "sha1").hexdigest()
+        signature, hmac.new(KEY, request.data, hashlib.sha1).hexdigest()
     )
 
 
@@ -196,7 +197,9 @@ def github_webhook():
     payload = json.dumps({"issue-id": issue_id, "transition": translator[action]})
 
     headers = {
-        "X-LGTM-Signature": hmac.new(KEY, payload.encode("utf-8"), "sha1").hexdigest()
+        "X-LGTM-Signature": hmac.new(
+            KEY, payload.encode("utf-8"), hashlib.sha1
+        ).hexdigest()
     }
 
     r = sess_lgtm.post(LGTM_URL, data=payload, headers=headers)
