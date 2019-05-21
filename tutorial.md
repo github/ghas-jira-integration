@@ -198,11 +198,12 @@ if transition == 'reopen':
 When setting up the issue tracker integration a secret key is automatically generated, and this is used to crytographically sign all outgoing requests. These are signed in the same way as callbacks for pull request integrations—for more information, see [verify-callback-signature](https://lgtm.com/help/lgtm/api/run-code-review#verify-callback-signature) in the LGTM help. Verification of the incoming requests can therefore be easily achieved as follows.
 
 ```python
+import hashlib
 import hmac
 
 KEY = os.getenv("LGTM_SECRET", '').encode('utf-8')
 
-digest = hmac.new(KEY, request.data, "sha1").hexdigest()
+digest = hmac.new(KEY, request.data, hashlib.sha1).hexdigest()
 signature = request.headers.get('X-LGTM-Signature', "not-provided")
 
 if not hmac.compare_digest(signature, digest):
@@ -217,6 +218,7 @@ Finally, putting all these pieces together, we have the following example Flask 
 import os
 from flask import Flask, request, jsonify
 import requests
+import hashlib
 import hmac
 
 app = Flask(__name__)
@@ -242,7 +244,7 @@ def get_issue_dict(alert, project):
 @app.route('/', methods=["POST"])
 def issues_webhook():
 
-    digest = hmac.new(KEY, request.data, "sha1").hexdigest()
+    digest = hmac.new(KEY, request.data, hashlib.sha1).hexdigest()
     signature = request.headers.get('X-LGTM-Signature', "not-provided")
 
     if not hmac.compare_digest(signature, digest):
