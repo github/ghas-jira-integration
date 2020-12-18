@@ -40,6 +40,10 @@ assert JIRA_PROJECT != None
 CLOSE_TRANSITION = "Done"
 REOPEN_TRANSITION = "To Do"
 
+# JIRA Webhook events
+JIRA_DELETE_EVENT = 'jira:issue_deleted'
+JIRA_UPDATE_EVENT = 'jira:issue_updated'
+
 REQUEST_TIMEOUT = 10
 REPO_SYNC_INTERVAL = 60 * 60 * 24     # full sync once a day
 
@@ -53,7 +57,7 @@ def auth_is_valid(signature, request_body):
     if app.debug:
         return True
     return hmac.compare_digest(
-        signature.encode('utf-8'), ('sha256=' + hmac.new(KEY, request_body, hashlib.sha256).hexdigest().encode('utf-8').decode('utf-8')).encode('utf-8')
+        signature.encode('utf-8'), ('sha256=' + hmac.new(KEY, request_body, hashlib.sha256).hexdigest()).encode('utf-8')
     )
 
 DESC_TEMPLATE="""
@@ -77,9 +81,35 @@ def jira_webhook():
     # Apparently, JIRA does not support an authentication mechanism for webhooks.
     # To make it slightly more secure, we will just pass a secret token as a URL parameter
     # In addition to that, it might be sensible to only whitelist the JIRA IP address
-    app.logger.info(request.args['secret_token'])
+    #if not hmac.compare_digest(request.args.get('secret_token', ''), KEY):
+    if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), KEY):
+        return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    #TODO: Implementation
+    json_dict = json.loads(request.data)
+    event = json_dict['webhookEvent']
+
+    # we only care about updates and deletions
+    if event not in [JIRA_UPDATE_EVENT, JIRA_DELETE_EVENT]:
+        app.logger.info('Ignoring event "{event}".'.format(event=event))
+        return jsonify({}), 200
+
+    idesc = json_dict['issue']['fields']['description']
+    istatus = json_dict['issue']['fields']['status']['name']
+    iid = get_issue_id_from_desc(idesc)
+
+    if iid == '':
+        app.logger.info('Ignoring issue not related to a code scanning alert.')
+        return jsonify({}), 200
+
+    repo_id, alert_num = parse_issue_id(iid)
+
+    if event == JIRA_UPDATE_EVENT:
+      if istatus == REOPEN_TRANSITION:
+          open_alert(repo_id, alert_num)
+      elif istatus == CLOSE_TRANSITION:
+          close_alert(repo_id, alert_num)
+    else:
+        close_alert(repo_id, alert_num)
 
     return jsonify({}), 200
 
@@ -234,9 +264,64 @@ def get_alerts(repo_id, state = None):
             yield a
 
 
-def get_issue_id(issue):
-    result = re.search('GH_ALERT_LOOKUP=.*$', issue.fields.description, re.MULTILINE)
+def get_alert(repo_id, alert_num):
+    headers = {'Accept': 'application/vnd.github.v3+json'}
+    resp = requests.get('{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
+                            api_url=GH_API_URL,
+                            repo_id=repo_id,
+                            alert_num=alert_num
+                        ),
+                        headers=headers,
+                        auth=(GH_USERNAME, GH_TOKEN),
+                        timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def open_alert(repo_id, alert_num):
+    state = get_alert(repo_id, alert_num)['state']
+    if state != 'open':
+        app.logger.info('Reopen alert {alert_num} of repository "{repo_id}".'.format(alert_num=alert_num, repo_id=repo_id))
+        update_alert(repo_id, alert_num, 'open')
+
+
+def close_alert(repo_id, alert_num):
+    state = get_alert(repo_id, alert_num)['state']
+    if state != 'dismissed':
+        app.logger.info('Closing alert {alert_num} of repository "{repo_id}".'.format(alert_num=alert_num, repo_id=repo_id))
+        update_alert(repo_id, alert_num, 'dismissed')
+
+
+def update_alert(repo_id, alert_num, state):
+    headers = {'Accept': 'application/vnd.github.v3+json'}
+    reason = ''
+    if state == 'dismissed':
+        reason = ', "dismissed_reason": "won\'t fix"'
+    data = '{{"state": "{state}"{reason}}}'.format(state=state, reason=reason)
+    resp = requests.patch('{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
+                              api_url=GH_API_URL,
+                              repo_id=repo_id,
+                              alert_num=alert_num
+                          ),
+                          data=data,
+                          headers=headers,
+                          auth=(GH_USERNAME, GH_TOKEN),
+                          timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+
+
+def get_issue_id_from_desc(desc):
+    result = re.search('GH_ALERT_LOOKUP=.*$', desc, re.MULTILINE)
     return '' if result is None else result[0][16:]
+
+
+def get_issue_id(issue):
+    return get_issue_id_from_desc(issue.fields.description)
+
+
+def parse_issue_id(iid):
+   m = re.match('^(.*)/code_scanning/([0-9]+)$', iid)
+   return m[1], m[2]
 
 
 def transition_issue(issue, transition):
