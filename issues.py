@@ -171,28 +171,12 @@ def update_jira(repo_name, transition,
 
     if transition == "created":
         app.logger.info('Creating new issue')
-        jira_issue = jira.create_issue(
-            project=JIRA_PROJECT,
-            summary='{rule} in {repo}'.format(rule=rule_id, repo=repo_name),
-            description=DESC_TEMPLATE.format(
-                rule_desc=rule_desc,
-                alert_url=alert_url,
-                repo_name=repo_name,
-                alert_num=alert_num,
-            ),
-            issuetype={'name': 'Bug'}
-        )
+        jira_issue = create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num)
         app.logger.info('Created issue ' + jira_issue.key)
         return jsonify({}), 200
 
     # if not creating a ticket, there should be an issue_id defined
-    issue_search = 'project={jira_project} and description ~ "\\"GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}\\""'.format(
-        jira_project=JIRA_PROJECT,
-        repo_name=repo_name,
-        alert_num=alert_num,
-    )
-    app.logger.info('Searching for issue to update: ' + issue_search)
-    existing_issues = jira.search_issues(issue_search)
+    existing_issues = fetch_issues(repo_name, alert_num)
 
     if not existing_issues:
         app.logger.error('No issues found for query: ' + issue_search)
@@ -208,28 +192,12 @@ def update_jira(repo_name, transition,
     jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
 
     if transition in ["closed_by_user", "fixed"]:
-        if CLOSE_TRANSITION not in jira_transitions:
-            app.logger.error('Transition "{close_transition}" not available for {issue_key}. Valid transition: {jira_transitions}'.format(
-                close_transition=CLOSE_TRANSITION,
-                issue_key=issue.key,
-                jira_transitions=list(jira_transitions)
-            ))
-            return jsonify({"code": 400, "error": "Close transition not found"}), 400
-        else:
-            jira.transition_issue(issue, jira_transitions[CLOSE_TRANSITION])
-            return jsonify({}), 200
+        transition_issue(issue, CLOSE_TRANSITION)
+        return jsonify({}), 200
 
     if transition in ["reopened_by_user", "reopened"]:
-        if REOPEN_TRANSITION not in jira_transitions:
-            app.logger.error('Transition "{reopen_transition}" not available for {issue_key}. Valid transition: {jira_transitions}'.format(
-                reopen_transition=REOPEN_TRANSITION,
-                issue_key=issue.key,
-                jira_transitions=list(jira_transitions)
-            ))
-            return jsonify({"code": 400, "error": "Close transition not found"}), 400
-        else:
-            jira.transition_issue(issue, jira_transitions[REOPEN_TRANSITION])
-            return jsonify({}), 200
+        transition_issue(issue, REOPEN_TRANSITION)
+        return jsonify({}), 200
 
     # when the transition is not recognised, we return a bad request response
     return (
@@ -323,9 +291,25 @@ def parse_issue_id(iid):
    m = re.match('^(.*)/code_scanning/([0-9]+)$', iid)
    return m[1], m[2]
 
+def fetch_issues(repo_name, alert_num=""):
+    issue_search = 'project={jira_project} and description ~ "\\"GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}\\""'.format(
+        jira_project=JIRA_PROJECT,
+        repo_name=repo_name,
+        alert_num=alert_num,
+    )
+    app.logger.info('Searching for issue to update: ' + issue_search)
+    return jira.search_issues(issue_search, maxResults=0)
 
 def transition_issue(issue, transition):
     jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
+    if transition not in jira_transitions:
+        app.logger.error('Transition "{transition}" not available for {issue_key}. Valid transition: {jira_transitions}'.format(
+                    transition=transition,
+                    issue_key=issue.key,
+                    jira_transitions=list(jira_transitions)
+                ))
+        raise Exception("Invalid JIRA transition")
+    
     jira.transition_issue(issue, jira_transitions[transition])
 
 
@@ -350,19 +334,15 @@ def sync_repo(repo_name):
     cs_alerts = {repo_name + '/code_scanning/' + str(a['number']): a for a in get_alerts(repo_name)}
 
     # fetch issues from JIRA and delete duplicates and ones which can't be matched
-    issue_search = 'project={jira_project} and description ~ "\\"GH_ALERT_LOOKUP={repo_name}/\\""'.format(
-        jira_project=JIRA_PROJECT,
-        repo_name=repo_name,
-    )
     jira_issues = {}
-    for i in jira.search_issues(issue_search, maxResults=0):
+    for i in fetch_issues(repo_name):
         key = get_issue_id(i)
         if key in jira_issues:
             app.logger.info('Deleting duplicate jira alert issue.')
-            i.delete()
+            i.delete()   # TODO - seems scary, are we sure....
         elif key not in cs_alerts:
             app.logger.info('Deleting orphaned jira alert issue.')
-            i.delete()
+            i.delete()   # TODO - seems scary, are we sure....
         else:
             jira_issues[key] = i
 
