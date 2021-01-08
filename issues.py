@@ -66,7 +66,7 @@ DESC_TEMPLATE="""
 {alert_url}
 
 ----
-This issue was automatically generated from a GitHub alert, and will be automaticall resolved once underlying problem is fixed.
+This issue was automatically generated from a GitHub alert, and will be automatically resolved once the underlying problem is fixed.
 DO NOT MODIFY DESCRIPTION BELOW LINE.
 GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}
 """
