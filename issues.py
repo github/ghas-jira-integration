@@ -85,7 +85,7 @@ def jira_webhook():
     if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), KEY):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    json_dict = json.loads(request.data)
+    json_dict = json.loads(request.data.decode('utf-8'))
     event = json_dict['webhookEvent']
 
     # we only care about updates and deletions
@@ -279,8 +279,8 @@ def update_alert(repo_id, alert_num, state):
 
 
 def get_issue_id_from_desc(desc):
-    result = re.search('GH_ALERT_LOOKUP=.*$', desc, re.MULTILINE)
-    return '' if result is None else result[0][16:]
+    result = re.search('GH_ALERT_LOOKUP=(.*)$', desc, re.MULTILINE)
+    return '' if result is None else result.group(1)
 
 
 def get_issue_id(issue):
@@ -289,7 +289,7 @@ def get_issue_id(issue):
 
 def parse_issue_id(iid):
    m = re.match('^(.*)/code_scanning/([0-9]+)$', iid)
-   return m[1], m[2]
+   return m.group(1), m.group(2)
 
 def fetch_issues(repo_name, alert_num=""):
     issue_search = 'project={jira_project} and description ~ "\\"GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}\\""'.format(
