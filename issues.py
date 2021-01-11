@@ -10,6 +10,7 @@ from jira import JIRA
 import itertools
 import re
 from datetime import datetime
+from types import SimpleNamespace
 
 
 GH_API_URL = os.getenv("GH_API_URL")
@@ -60,7 +61,7 @@ def auth_is_valid(signature, request_body):
         signature.encode('utf-8'), ('sha256=' + hmac.new(KEY, request_body, hashlib.sha256).hexdigest()).encode('utf-8')
     )
 
-DESC_TEMPLATE="""
+JIRA_DESC_TEMPLATE="""
 {rule_desc}
 
 {alert_url}
@@ -68,7 +69,10 @@ DESC_TEMPLATE="""
 ----
 This issue was automatically generated from a GitHub alert, and will be automatically resolved once the underlying problem is fixed.
 DO NOT MODIFY DESCRIPTION BELOW LINE.
-GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}
+REPOSITORY_NAME={repo_name}
+ALERT_NUMBER={alert_num}
+REPOSITORY_KEY={repo_key}
+ALERT_KEY={alert_key}
 """
 
 last_repo_syncs = {}
@@ -84,25 +88,23 @@ def jira_webhook():
     if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), KEY):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    json_dict = json.loads(request.data.decode('utf-8'))
-    event = json_dict['webhookEvent']
+    payload = json.loads(request.data.decode('utf-8'), object_hook=lambda p: SimpleNamespace(**p))
+    event = payload.webhookEvent
+    issue = payload.issue
+
+    if not is_managed(issue):
+        app.logger.info('Ignoring issue not related to a code scanning alert.')
+        return jsonify({}), 200
 
     # we only care about updates and deletions
     if event not in [JIRA_UPDATE_EVENT, JIRA_DELETE_EVENT]:
         app.logger.info('Ignoring event "{event}".'.format(event=event))
         return jsonify({}), 200
 
-    idesc = json_dict['issue']['fields']['description']
-    istatus = json_dict['issue']['fields']['status']['name']
-    iid = get_issue_id_from_desc(idesc)
-
-    if iid == '':
-        app.logger.info('Ignoring issue not related to a code scanning alert.')
-        return jsonify({}), 200
-
-    repo_id, alert_num = parse_issue_id(iid)
+    repo_id, alert_num, _, _ = get_alert_info(issue)
 
     if event == JIRA_UPDATE_EVENT:
+        istatus = issue.fields.status.name
         if istatus == REOPEN_TRANSITION:
             open_alert(repo_id, alert_num)
         elif istatus == CLOSE_TRANSITION:
@@ -274,31 +276,55 @@ def update_alert(repo_id, alert_num, state):
     resp.raise_for_status()
 
 
-def get_issue_id_from_desc(desc):
-    result = re.search('GH_ALERT_LOOKUP=(.*)$', desc, re.MULTILINE)
-    return '' if result is None else result.group(1)
+def is_managed(issue):
+    if parse_alert_info(issue.fields.description)[0] is None:
+        return False
+    return True
 
 
-def get_issue_id(issue):
-    return get_issue_id_from_desc(issue.fields.description)
+def parse_alert_info(desc):
+    '''
+    Parse all the fieldsin an issue's description and return
+    them as a tuple. If parsing fails for one of the fields,
+    return a tuple of None's.
+    '''
+    failed = None, None, None, None
+    m = re.search('REPOSITORY_NAME=(.*)$', desc, re.MULTILINE)
+    if m is None:
+        return failed
+    repo_id = m.group(1)
+    m = re.search('ALERT_NUMBER=(.*)$', desc, re.MULTILINE)
+    if m is None:
+        return failed
+    alert_num = m.group(1)
+    m = re.search('REPOSITORY_KEY=(.*)$', desc, re.MULTILINE)
+    if m is None:
+        return failed
+    repo_key = m.group(1)
+    m = re.search('ALERT_KEY=(.*)$', desc, re.MULTILINE)
+    if m is None:
+        return failed
+    alert_key = m.group(1)
+    return repo_id, alert_num, repo_key, alert_key
 
 
-def parse_issue_id(iid):
-    m = re.match('^(.*)/code_scanning/([0-9]+)$', iid)
-    return m.group(1), m.group(2)
+def get_alert_info(issue):
+    return parse_alert_info(issue.fields.description)
 
-def fetch_issues(repo_name, alert_num=""):
-    issue_search = 'project={jira_project} and description ~ "\\"GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}\\""'.format(
+
+def fetch_issues(repo_name, alert_num=None):
+    key = make_key(repo_name + (('/' + str(alert_num)) if alert_num is not None else ''))
+    issue_search = 'project={jira_project} and description ~ "{key}"'.format(
         jira_project=JIRA_PROJECT,
-        repo_name=repo_name,
-        alert_num=alert_num,
+        key=key
     )
-    result = jira.search_issues(issue_search, maxResults=0)
+    result = list(filter(is_managed, jira.search_issues(issue_search, maxResults=0)))
     app.logger.info('Search {search} returned {num_results} results.'.format(
         search=issue_search,
         num_results=len(result)
     ))
     return result
+
 
 def transition_issue(issue, transition):
     jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
@@ -317,11 +343,13 @@ def create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num):
     return jira.create_issue(
         project=JIRA_PROJECT,
         summary='{rule} in {repo}'.format(rule=rule_id, repo=repo_name),
-        description=DESC_TEMPLATE.format(
+        description=JIRA_DESC_TEMPLATE.format(
             rule_desc=rule_desc,
             alert_url=alert_url,
             repo_name=repo_name,
             alert_num=alert_num,
+            repo_key=make_key(repo_name),
+            alert_key=make_key(repo_name + '/' + str(alert_num))
         ),
         issuetype={'name': 'Bug'}
     )
@@ -331,12 +359,12 @@ def sync_repo(repo_name):
     app.logger.info('Starting full sync for repository "{repo_name}"...'.format(repo_name=repo_name))
 
     # fetch code scanning alerts from GitHub
-    cs_alerts = {repo_name + '/code_scanning/' + str(a['number']): a for a in get_alerts(repo_name)}
+    cs_alerts = {make_key(repo_name + '/' + str(a['number'])): a for a in get_alerts(repo_name)}
 
     # fetch issues from JIRA and delete duplicates and ones which can't be matched
     jira_issues = {}
     for i in fetch_issues(repo_name):
-        key = get_issue_id(i)
+        _, _, _, key = get_alert_info(i)
         if key in jira_issues:
             app.logger.info('Deleting duplicate jira alert issue.')
             i.delete()   # TODO - seems scary, are we sure....
@@ -391,3 +419,9 @@ def sync_repo(repo_name):
                 )
             )
             transition_issue(issue, CLOSE_TRANSITION)
+
+
+def make_key(s):
+    sha_1 = hashlib.sha1()
+    sha_1.update(s.encode('utf-8'))
+    return sha_1.hexdigest()
