@@ -2,6 +2,7 @@ import os
 from flask import Flask, request, jsonify
 
 import requests
+from requests import HTTPError
 import json
 import hashlib
 import hmac
@@ -107,14 +108,23 @@ def jira_webhook():
 
     repo_id, alert_num, _, _ = get_alert_info(issue)
 
-    if event == JIRA_UPDATE_EVENT:
-        istatus = issue.fields.status.name
-        if istatus == JIRA_OPEN_STATUS:
-            open_alert(repo_id, alert_num)
-        elif istatus == JIRA_CLOSED_STATUS:
+    try:
+        if event == JIRA_UPDATE_EVENT:
+            istatus = issue.fields.status.name
+            if istatus == JIRA_OPEN_STATUS:
+                open_alert(repo_id, alert_num)
+            elif istatus == JIRA_CLOSED_STATUS:
+                close_alert(repo_id, alert_num)
+        else:
             close_alert(repo_id, alert_num)
-    else:
-        close_alert(repo_id, alert_num)
+    except HTTPError as httpe:
+        # A 404 suggests that the alert doesn't exist on the
+        # Github side and that the JIRA issue is orphaned.
+        # We simply ignore this, since it will be fixed during
+        # the next scheduled full sync.
+        if httpe.response.status_code != 404:
+            # propagate everything else
+            raise
 
     return jsonify({}), 200
 
@@ -372,7 +382,7 @@ def create_issue(repo_id, rule_id, rule_desc, alert_url, alert_num):
         description=JIRA_DESC_TEMPLATE.format(
             rule_desc=rule_desc,
             alert_url=alert_url,
-            repo_id=repo_id,
+            repo_name=repo_id,
             alert_num=alert_num,
             repo_key=make_key(repo_id),
             alert_key=make_key(repo_id + '/' + str(alert_num))
@@ -392,7 +402,15 @@ def sync_repo(repo_name):
     app.logger.info('Starting full sync for repository "{repo_name}"...'.format(repo_name=repo_name))
 
     # fetch code scanning alerts from GitHub
-    cs_alerts = {make_key(repo_name + '/' + str(a['number'])): a for a in get_alerts(repo_name)}
+    cs_alerts = []
+    try:
+        cs_alerts = {make_key(repo_name + '/' + str(a['number'])): a for a in get_alerts(repo_name)}
+    except HTTPError as httpe:
+        # if we receive a 404, the repository does not exist,
+        # so we will delete all related JIRA alert issues
+        if httpe.response.status_code != 404:
+            # propagate everything else
+            raise
 
     # fetch issues from JIRA and delete duplicates and ones which can't be matched
     jira_issues = {}
