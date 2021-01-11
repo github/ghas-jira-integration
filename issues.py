@@ -92,13 +92,15 @@ def jira_webhook():
     event = payload.webhookEvent
     issue = payload.issue
 
+    app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))
+
     if not is_managed(issue):
-        app.logger.info('Ignoring issue not related to a code scanning alert.')
+        app.logger.debug('Ignoring JIRA webhook for issue not related to a code scanning alert.')
         return jsonify({}), 200
 
     # we only care about updates and deletions
     if event not in [JIRA_UPDATE_EVENT, JIRA_DELETE_EVENT]:
-        app.logger.info('Ignoring event "{event}".'.format(event=event))
+        app.logger.debug('Ignoring JIRA webhook for event "{event}".'.format(event=event))
         return jsonify({}), 200
 
     repo_id, alert_num, _, _ = get_alert_info(issue)
@@ -122,6 +124,8 @@ def github_webhook():
     By default, flask runs in single-threaded mode, so we don't need to worry about
     any race conditions.
     """
+
+    app.logger.debug('Received GITHUB webhook for event "{event}"'.format(event=request.headers.get("X-GitHub-Event", "")))
 
     if not auth_is_valid(request.headers.get("X-Hub-Signature-256", "not-provided"), request.data):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
@@ -162,18 +166,16 @@ def github_webhook():
 def update_jira(repo_name, transition,
                 alert_url, alert_num,
                 rule_id, rule_desc):
-    app.logger.info('Received {action} for {alert_url}'.format(action=transition, alert_url=alert_url))
+    app.logger.debug('Received GITHUB webhook {action} for {alert_url}'.format(action=transition, alert_url=alert_url))
 
     # we deal with each action type individually, showing the expected
     # behaviour and response codes explicitly
     if transition == "appeared_in_branch":
-        app.logger.info('Nothing to do for appeared_in_branch')
+        app.logger.debug('Nothing to do for appeared_in_branch')
         return jsonify({}), 200
 
     if transition == "created":
-        app.logger.info('Creating new issue')
         jira_issue = create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num)
-        app.logger.info('Created issue ' + jira_issue.key)
         return jsonify({}), 200
 
     # if not creating a ticket, there should be an issue_id defined
@@ -187,7 +189,6 @@ def update_jira(repo_name, transition,
         existing_issues.sort(key=lambda i: i.id)
 
     issue = existing_issues[0]
-    app.logger.info('Found issue to update: ' + issue.key)
 
     if transition in ["closed_by_user", "fixed"]:
         transition_issue(issue, CLOSE_TRANSITION)
@@ -329,30 +330,46 @@ def fetch_issues(repo_name, alert_num=None):
 def transition_issue(issue, transition):
     jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
     if transition not in jira_transitions:
-        app.logger.error('Transition "{transition}" not available for {issue_key}. Valid transition: {jira_transitions}'.format(
+        app.logger.error('Transition "{transition}" not available for {issue_key}. Valid transitions: {jira_transitions}'.format(
             transition=transition,
             issue_key=issue.key,
             jira_transitions=list(jira_transitions)
         ))
         raise Exception("Invalid JIRA transition")
 
+    old_issue_status = str(issue.fields.status)
     jira.transition_issue(issue, jira_transitions[transition])
 
+    app.logger.info(
+        'Adjusted status for issue {issue_key} from {old_issue_status} to {new_issue_status}.'.format(
+            issue_key=issue.key,
+            old_issue_status=old_issue_status,
+            new_issue_status=transition
+        )
+    )
 
-def create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num):
-    return jira.create_issue(
+
+def create_issue(repo_id, rule_id, rule_desc, alert_url, alert_num):
+    result = jira.create_issue(
         project=JIRA_PROJECT,
-        summary='{rule} in {repo}'.format(rule=rule_id, repo=repo_name),
+        summary='{rule} in {repo}'.format(rule=rule_id, repo=repo_id),
         description=JIRA_DESC_TEMPLATE.format(
             rule_desc=rule_desc,
             alert_url=alert_url,
-            repo_name=repo_name,
+            repo_id=repo_id,
             alert_num=alert_num,
-            repo_key=make_key(repo_name),
-            alert_key=make_key(repo_name + '/' + str(alert_num))
+            repo_key=make_key(repo_id),
+            alert_key=make_key(repo_id + '/' + str(alert_num))
         ),
         issuetype={'name': 'Bug'}
     )
+    app.logger.info('Created issue {issue_key} for alert {alert_num} in {repo_id}.'.format(
+        issue_key=result.key,
+        alert_num=alert_num,
+        repo_id=repo_id
+    ))
+
+    return result
 
 
 def sync_repo(repo_name):
@@ -366,10 +383,10 @@ def sync_repo(repo_name):
     for i in fetch_issues(repo_name):
         _, _, _, key = get_alert_info(i)
         if key in jira_issues:
-            app.logger.info('Deleting duplicate jira alert issue.')
+            app.logger.info('Deleting duplicate jira alert issue {key}.'.format(key=i.key))
             i.delete()   # TODO - seems scary, are we sure....
         elif key not in cs_alerts:
-            app.logger.info('Deleting orphaned jira alert issue.')
+            app.logger.info('Deleting orphaned jira alert issue {key}.'.format(key=i.key))
             i.delete()   # TODO - seems scary, are we sure....
         else:
             jira_issues[key] = i
@@ -380,12 +397,6 @@ def sync_repo(repo_name):
             alert = cs_alerts[key]
             rule = alert['rule']
 
-            app.logger.info(
-                'Creating missing issue for alert {num} in {repo_name}.'.format(
-                    num=alert['number'],
-                    repo_name=repo_name
-                )
-            )
             jira_issues[key] = create_issue(
                 repo_name,
                 rule['id'],
@@ -402,22 +413,8 @@ def sync_repo(repo_name):
         astatus = alert['state']
 
         if astatus == 'open' and istatus != REOPEN_TRANSITION:
-            app.logger.info(
-                '{repo_name}: Adjusting issue status from "{old}" to "{new}"'.format(
-                    repo_name=repo_name,
-                    old=istatus,
-                    new=REOPEN_TRANSITION
-                )
-            )
             transition_issue(issue, REOPEN_TRANSITION)
         elif astatus != 'open' and istatus != CLOSE_TRANSITION:
-            app.logger.info(
-                '{repo_name}: Adjusting issue status from "{old}" to "{new}"'.format(
-                    repo_name=repo_name,
-                    old=istatus,
-                    new=CLOSE_TRANSITION
-                )
-            )
             transition_issue(issue, CLOSE_TRANSITION)
 
 
