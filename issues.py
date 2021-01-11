@@ -179,11 +179,10 @@ def update_jira(repo_name, transition,
     existing_issues = fetch_issues(repo_name, alert_num)
 
     if not existing_issues:
-        app.logger.error('No issues found for query: ' + issue_search)
         return jsonify({"code": 400, "error": "Issue not found"}), 400
 
     if len(existing_issues) > 1:
-        app.logger.warning('Multiple issues found for: ' + issue_search + '. Selecting by min id.')
+        app.logger.warning('Multiple issues found. Selecting by min id.')
         existing_issues.sort(key=lambda i: i.id)
 
     issue = existing_issues[0]
@@ -297,8 +296,12 @@ def fetch_issues(repo_name, alert_num=""):
         repo_name=repo_name,
         alert_num=alert_num,
     )
-    app.logger.info('Searching for issue to update: ' + issue_search)
-    return jira.search_issues(issue_search, maxResults=0)
+    result = jira.search_issues(issue_search, maxResults=0)
+    app.logger.info('Search {search} returned {num_results} results.'.format(
+        search=issue_search,
+        num_results=len(result)
+    ))
+    return result
 
 def transition_issue(issue, transition):
     jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
