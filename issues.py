@@ -81,7 +81,6 @@ def jira_webhook():
     # Apparently, JIRA does not support an authentication mechanism for webhooks.
     # To make it slightly more secure, we will just pass a secret token as a URL parameter
     # In addition to that, it might be sensible to only whitelist the JIRA IP address
-    #if not hmac.compare_digest(request.args.get('secret_token', ''), KEY):
     if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), KEY):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
@@ -187,8 +186,6 @@ def update_jira(repo_name, transition,
 
     issue = existing_issues[0]
     app.logger.info('Found issue to update: ' + issue.key)
-
-    jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
 
     if transition in ["closed_by_user", "fixed"]:
         transition_issue(issue, CLOSE_TRANSITION)
