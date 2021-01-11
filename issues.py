@@ -104,10 +104,10 @@ def jira_webhook():
     repo_id, alert_num = parse_issue_id(iid)
 
     if event == JIRA_UPDATE_EVENT:
-      if istatus == REOPEN_TRANSITION:
-          open_alert(repo_id, alert_num)
-      elif istatus == CLOSE_TRANSITION:
-          close_alert(repo_id, alert_num)
+        if istatus == REOPEN_TRANSITION:
+            open_alert(repo_id, alert_num)
+        elif istatus == CLOSE_TRANSITION:
+            close_alert(repo_id, alert_num)
     else:
         close_alert(repo_id, alert_num)
 
@@ -287,8 +287,8 @@ def get_issue_id(issue):
 
 
 def parse_issue_id(iid):
-   m = re.match('^(.*)/code_scanning/([0-9]+)$', iid)
-   return m.group(1), m.group(2)
+    m = re.match('^(.*)/code_scanning/([0-9]+)$', iid)
+    return m.group(1), m.group(2)
 
 def fetch_issues(repo_name, alert_num=""):
     issue_search = 'project={jira_project} and description ~ "\\"GH_ALERT_LOOKUP={repo_name}/code_scanning/{alert_num}\\""'.format(
@@ -307,12 +307,12 @@ def transition_issue(issue, transition):
     jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
     if transition not in jira_transitions:
         app.logger.error('Transition "{transition}" not available for {issue_key}. Valid transition: {jira_transitions}'.format(
-                    transition=transition,
-                    issue_key=issue.key,
-                    jira_transitions=list(jira_transitions)
-                ))
+            transition=transition,
+            issue_key=issue.key,
+            jira_transitions=list(jira_transitions)
+        ))
         raise Exception("Invalid JIRA transition")
-    
+
     jira.transition_issue(issue, jira_transitions[transition])
 
 
@@ -352,22 +352,22 @@ def sync_repo(repo_name):
     # create missing issues
     for key in cs_alerts:
         if key not in jira_issues:
-          alert = cs_alerts[key]
-          rule = alert['rule']
+            alert = cs_alerts[key]
+            rule = alert['rule']
 
-          app.logger.info(
-              'Creating missing issue for alert {num} in {repo_name}.'.format(
-                  num=alert['number'],
-                  repo_name=repo_name
-              )
-          )
-          jira_issues[key] = create_issue(
-              repo_name,
-              rule['id'],
-              rule['description'],
-              alert['html_url'],
-              alert['number']
-          )
+            app.logger.info(
+                'Creating missing issue for alert {num} in {repo_name}.'.format(
+                    num=alert['number'],
+                    repo_name=repo_name
+                )
+            )
+            jira_issues[key] = create_issue(
+                repo_name,
+                rule['id'],
+                rule['description'],
+                alert['html_url'],
+                alert['number']
+            )
 
     # adjust issue states
     for key in cs_alerts:
