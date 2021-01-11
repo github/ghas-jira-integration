@@ -38,8 +38,10 @@ JIRA_PROJECT = os.getenv("JIRA_PROJECT")
 assert JIRA_PROJECT != None
 
 # May need to be changed depending on JIRA project type
-CLOSE_TRANSITION = "Done"
-REOPEN_TRANSITION = "To Do"
+JIRA_CLOSE_TRANSITION = "Done"
+JIRA_REOPEN_TRANSITION = "To Do"
+JIRA_OPEN_STATUS = "To Do"
+JIRA_CLOSED_STATUS = "Done"
 
 # JIRA Webhook events
 JIRA_DELETE_EVENT = 'jira:issue_deleted'
@@ -107,9 +109,9 @@ def jira_webhook():
 
     if event == JIRA_UPDATE_EVENT:
         istatus = issue.fields.status.name
-        if istatus == REOPEN_TRANSITION:
+        if istatus == JIRA_OPEN_STATUS:
             open_alert(repo_id, alert_num)
-        elif istatus == CLOSE_TRANSITION:
+        elif istatus == JIRA_CLOSED_STATUS:
             close_alert(repo_id, alert_num)
     else:
         close_alert(repo_id, alert_num)
@@ -171,7 +173,7 @@ def update_jira(repo_name, transition,
     # we deal with each action type individually, showing the expected
     # behaviour and response codes explicitly
     if transition == "appeared_in_branch":
-        app.logger.debug('Nothing to do for appeared_in_branch')
+        app.logger.debug('Nothing to do for "appeared_in_branch"')
         return jsonify({}), 200
 
     if transition == "created":
@@ -191,11 +193,11 @@ def update_jira(repo_name, transition,
     issue = existing_issues[0]
 
     if transition in ["closed_by_user", "fixed"]:
-        transition_issue(issue, CLOSE_TRANSITION)
+        close_issue(issue)
         return jsonify({}), 200
 
     if transition in ["reopened_by_user", "reopened"]:
-        transition_issue(issue, REOPEN_TRANSITION)
+        open_issue(issue)
         return jsonify({}), 200
 
     # when the transition is not recognised, we return a bad request response
@@ -320,11 +322,19 @@ def fetch_issues(repo_name, alert_num=None):
         key=key
     )
     result = list(filter(is_managed, jira.search_issues(issue_search, maxResults=0)))
-    app.logger.info('Search {search} returned {num_results} results.'.format(
+    app.logger.debug('Search {search} returned {num_results} results.'.format(
         search=issue_search,
         num_results=len(result)
     ))
     return result
+
+
+def open_issue(issue):
+    transition_issue(issue, JIRA_REOPEN_TRANSITION)
+
+
+def close_issue(issue):
+    transition_issue(issue, JIRA_CLOSE_TRANSITION)
 
 
 def transition_issue(issue, transition):
@@ -338,13 +348,19 @@ def transition_issue(issue, transition):
         raise Exception("Invalid JIRA transition")
 
     old_issue_status = str(issue.fields.status)
+
+    if old_issue_status == JIRA_OPEN_STATUS and transition == JIRA_REOPEN_TRANSITION or \
+       old_issue_status == JIRA_CLOSED_STATUS and transition == JIRA_CLOSE_TRANSITION:
+        # nothing to do
+        return
+
     jira.transition_issue(issue, jira_transitions[transition])
 
     app.logger.info(
-        'Adjusted status for issue {issue_key} from {old_issue_status} to {new_issue_status}.'.format(
+        'Adjusted status for issue {issue_key} from "{old_issue_status}" to "{new_issue_status}".'.format(
             issue_key=issue.key,
             old_issue_status=old_issue_status,
-            new_issue_status=transition
+            new_issue_status=JIRA_CLOSED_STATUS if (old_issue_status == JIRA_OPEN_STATUS) else JIRA_OPEN_STATUS
         )
     )
 
@@ -412,10 +428,10 @@ def sync_repo(repo_name):
         istatus = str(issue.fields.status)
         astatus = alert['state']
 
-        if astatus == 'open' and istatus != REOPEN_TRANSITION:
-            transition_issue(issue, REOPEN_TRANSITION)
-        elif astatus != 'open' and istatus != CLOSE_TRANSITION:
-            transition_issue(issue, CLOSE_TRANSITION)
+        if astatus == 'open':
+            open_issue(issue)
+        else:
+            close_issue(issue)
 
 
 def make_key(s):
