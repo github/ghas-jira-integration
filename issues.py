@@ -1,17 +1,17 @@
 import os
 from flask import Flask, request, jsonify
-
+from flask.logging import default_handler
 import requests
 from requests import HTTPError
 import json
 import hashlib
 import hmac
 import logging
-from jira import JIRA
 import itertools
-import re
 from datetime import datetime
 from types import SimpleNamespace
+import util
+import jiralib
 
 
 GH_API_URL = os.getenv("GH_API_URL")
@@ -38,24 +38,15 @@ assert JIRA_PASSWORD != None
 JIRA_PROJECT = os.getenv("JIRA_PROJECT")
 assert JIRA_PROJECT != None
 
-# May need to be changed depending on JIRA project type
-JIRA_CLOSE_TRANSITION = "Done"
-JIRA_REOPEN_TRANSITION = "To Do"
-JIRA_OPEN_STATUS = "To Do"
-JIRA_CLOSED_STATUS = "Done"
-
-# JIRA Webhook events
-JIRA_DELETE_EVENT = 'jira:issue_deleted'
-JIRA_UPDATE_EVENT = 'jira:issue_updated'
-
 REQUEST_TIMEOUT = 10
 REPO_SYNC_INTERVAL = 60 * 60 * 24     # full sync once a day
 
-jira = JIRA(JIRA_URL, auth=(JIRA_USERNAME, JIRA_PASSWORD))
-
 app = Flask(__name__)
-
+logging.getLogger('jiralib').addHandler(default_handler)
 logging.basicConfig(level=logging.INFO)
+
+jiraProject = jiralib.Jira(JIRA_URL, JIRA_USERNAME, JIRA_PASSWORD).getProject(JIRA_PROJECT)
+
 
 def auth_is_valid(signature, request_body):
     if app.debug:
@@ -64,19 +55,6 @@ def auth_is_valid(signature, request_body):
         signature.encode('utf-8'), ('sha256=' + hmac.new(KEY, request_body, hashlib.sha256).hexdigest()).encode('utf-8')
     )
 
-JIRA_DESC_TEMPLATE="""
-{rule_desc}
-
-{alert_url}
-
-----
-This issue was automatically generated from a GitHub alert, and will be automatically resolved once the underlying problem is fixed.
-DO NOT MODIFY DESCRIPTION BELOW LINE.
-REPOSITORY_NAME={repo_name}
-ALERT_NUMBER={alert_num}
-REPOSITORY_KEY={repo_key}
-ALERT_KEY={alert_key}
-"""
 
 last_repo_syncs = {}
 
@@ -93,27 +71,26 @@ def jira_webhook():
 
     payload = json.loads(request.data.decode('utf-8'), object_hook=lambda p: SimpleNamespace(**p))
     event = payload.webhookEvent
-    issue = payload.issue
+    issue = jiralib.JiraIssue(jiraProject, payload.issue)
 
     app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))
 
-    if not is_managed(issue):
+    if not issue.is_managed():
         app.logger.debug('Ignoring JIRA webhook for issue not related to a code scanning alert.')
         return jsonify({}), 200
 
     # we only care about updates and deletions
-    if event not in [JIRA_UPDATE_EVENT, JIRA_DELETE_EVENT]:
+    if event not in [jiralib.UPDATE_EVENT, jiralib.DELETE_EVENT]:
         app.logger.debug('Ignoring JIRA webhook for event "{event}".'.format(event=event))
         return jsonify({}), 200
 
-    repo_id, alert_num, _, _ = get_alert_info(issue)
+    repo_id, alert_num, _, _ = issue.get_alert_info()
 
     try:
-        if event == JIRA_UPDATE_EVENT:
-            istatus = issue.fields.status.name
-            if istatus == JIRA_OPEN_STATUS:
+        if event == jiralib.UPDATE_EVENT:
+            if issue.is_open():
                 open_alert(repo_id, alert_num)
-            elif istatus == JIRA_CLOSED_STATUS:
+            elif issue.is_closed():
                 close_alert(repo_id, alert_num)
         else:
             close_alert(repo_id, alert_num)
@@ -187,27 +164,27 @@ def update_jira(repo_name, transition,
         return jsonify({}), 200
 
     if transition == "created":
-        jira_issue = create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num)
+        jiraProject.create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num)
         return jsonify({}), 200
 
     # if not creating a ticket, there should be an issue_id defined
-    existing_issues = fetch_issues(repo_name, alert_num)
+    existing_issues = jiraProject.fetch_issues(repo_name, alert_num)
 
     if not existing_issues:
         return jsonify({"code": 400, "error": "Issue not found"}), 400
 
     if len(existing_issues) > 1:
         app.logger.warning('Multiple issues found. Selecting by min id.')
-        existing_issues.sort(key=lambda i: i.id)
+        existing_issues.sort(key=lambda i: i.id())
 
     issue = existing_issues[0]
 
     if transition in ["closed_by_user", "fixed"]:
-        close_issue(issue)
+        issue.close()
         return jsonify({}), 200
 
     if transition in ["reopened_by_user", "reopened"]:
-        open_issue(issue)
+        issue.open()
         return jsonify({}), 200
 
     # when the transition is not recognised, we return a bad request response
@@ -289,122 +266,13 @@ def update_alert(repo_id, alert_num, state):
     resp.raise_for_status()
 
 
-def is_managed(issue):
-    if parse_alert_info(issue.fields.description)[0] is None:
-        return False
-    return True
-
-
-def parse_alert_info(desc):
-    '''
-    Parse all the fieldsin an issue's description and return
-    them as a tuple. If parsing fails for one of the fields,
-    return a tuple of None's.
-    '''
-    failed = None, None, None, None
-    m = re.search('REPOSITORY_NAME=(.*)$', desc, re.MULTILINE)
-    if m is None:
-        return failed
-    repo_id = m.group(1)
-    m = re.search('ALERT_NUMBER=(.*)$', desc, re.MULTILINE)
-    if m is None:
-        return failed
-    alert_num = m.group(1)
-    m = re.search('REPOSITORY_KEY=(.*)$', desc, re.MULTILINE)
-    if m is None:
-        return failed
-    repo_key = m.group(1)
-    m = re.search('ALERT_KEY=(.*)$', desc, re.MULTILINE)
-    if m is None:
-        return failed
-    alert_key = m.group(1)
-    return repo_id, alert_num, repo_key, alert_key
-
-
-def get_alert_info(issue):
-    return parse_alert_info(issue.fields.description)
-
-
-def fetch_issues(repo_name, alert_num=None):
-    key = make_key(repo_name + (('/' + str(alert_num)) if alert_num is not None else ''))
-    issue_search = 'project={jira_project} and description ~ "{key}"'.format(
-        jira_project=JIRA_PROJECT,
-        key=key
-    )
-    result = list(filter(is_managed, jira.search_issues(issue_search, maxResults=0)))
-    app.logger.debug('Search {search} returned {num_results} results.'.format(
-        search=issue_search,
-        num_results=len(result)
-    ))
-    return result
-
-
-def open_issue(issue):
-    transition_issue(issue, JIRA_REOPEN_TRANSITION)
-
-
-def close_issue(issue):
-    transition_issue(issue, JIRA_CLOSE_TRANSITION)
-
-
-def transition_issue(issue, transition):
-    jira_transitions = {t['name'] : t['id'] for t in jira.transitions(issue)}
-    if transition not in jira_transitions:
-        app.logger.error('Transition "{transition}" not available for {issue_key}. Valid transitions: {jira_transitions}'.format(
-            transition=transition,
-            issue_key=issue.key,
-            jira_transitions=list(jira_transitions)
-        ))
-        raise Exception("Invalid JIRA transition")
-
-    old_issue_status = str(issue.fields.status)
-
-    if old_issue_status == JIRA_OPEN_STATUS and transition == JIRA_REOPEN_TRANSITION or \
-       old_issue_status == JIRA_CLOSED_STATUS and transition == JIRA_CLOSE_TRANSITION:
-        # nothing to do
-        return
-
-    jira.transition_issue(issue, jira_transitions[transition])
-
-    app.logger.info(
-        'Adjusted status for issue {issue_key} from "{old_issue_status}" to "{new_issue_status}".'.format(
-            issue_key=issue.key,
-            old_issue_status=old_issue_status,
-            new_issue_status=JIRA_CLOSED_STATUS if (old_issue_status == JIRA_OPEN_STATUS) else JIRA_OPEN_STATUS
-        )
-    )
-
-
-def create_issue(repo_id, rule_id, rule_desc, alert_url, alert_num):
-    result = jira.create_issue(
-        project=JIRA_PROJECT,
-        summary='{rule} in {repo}'.format(rule=rule_id, repo=repo_id),
-        description=JIRA_DESC_TEMPLATE.format(
-            rule_desc=rule_desc,
-            alert_url=alert_url,
-            repo_name=repo_id,
-            alert_num=alert_num,
-            repo_key=make_key(repo_id),
-            alert_key=make_key(repo_id + '/' + str(alert_num))
-        ),
-        issuetype={'name': 'Bug'}
-    )
-    app.logger.info('Created issue {issue_key} for alert {alert_num} in {repo_id}.'.format(
-        issue_key=result.key,
-        alert_num=alert_num,
-        repo_id=repo_id
-    ))
-
-    return result
-
-
 def sync_repo(repo_name):
     app.logger.info('Starting full sync for repository "{repo_name}"...'.format(repo_name=repo_name))
 
     # fetch code scanning alerts from GitHub
     cs_alerts = []
     try:
-        cs_alerts = {make_key(repo_name + '/' + str(a['number'])): a for a in get_alerts(repo_name)}
+        cs_alerts = {util.make_key(repo_name + '/' + str(a['number'])): a for a in get_alerts(repo_name)}
     except HTTPError as httpe:
         # if we receive a 404, the repository does not exist,
         # so we will delete all related JIRA alert issues
@@ -414,13 +282,13 @@ def sync_repo(repo_name):
 
     # fetch issues from JIRA and delete duplicates and ones which can't be matched
     jira_issues = {}
-    for i in fetch_issues(repo_name):
-        _, _, _, key = get_alert_info(i)
+    for i in jiraProject.fetch_issues(repo_name):
+        _, _, _, key = i.get_alert_info()
         if key in jira_issues:
-            app.logger.info('Deleting duplicate jira alert issue {key}.'.format(key=i.key))
+            app.logger.info('Deleting duplicate jira alert issue {key}.'.format(key=i.key()))
             i.delete()   # TODO - seems scary, are we sure....
         elif key not in cs_alerts:
-            app.logger.info('Deleting orphaned jira alert issue {key}.'.format(key=i.key))
+            app.logger.info('Deleting orphaned jira alert issue {key}.'.format(key=i.key()))
             i.delete()   # TODO - seems scary, are we sure....
         else:
             jira_issues[key] = i
@@ -431,7 +299,7 @@ def sync_repo(repo_name):
             alert = cs_alerts[key]
             rule = alert['rule']
 
-            jira_issues[key] = create_issue(
+            jira_issues[key] = jiraProject.create_issue(
                 repo_name,
                 rule['id'],
                 rule['description'],
@@ -443,16 +311,9 @@ def sync_repo(repo_name):
     for key in cs_alerts:
         alert = cs_alerts[key]
         issue = jira_issues[key]
-        istatus = str(issue.fields.status)
         astatus = alert['state']
 
         if astatus == 'open':
-            open_issue(issue)
+            issue.open()
         else:
-            close_issue(issue)
-
-
-def make_key(s):
-    sha_1 = hashlib.sha1()
-    sha_1.update(s.encode('utf-8'))
-    return sha_1.hexdigest()
+            issue.close()
