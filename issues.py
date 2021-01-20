@@ -1,17 +1,16 @@
 import os
 from flask import Flask, request, jsonify
 from flask.logging import default_handler
-import requests
 from requests import HTTPError
 import json
 import hashlib
 import hmac
 import logging
-import itertools
 from datetime import datetime
 from types import SimpleNamespace
 import util
 import jiralib
+import ghlib
 
 
 GH_API_URL = os.getenv("GH_API_URL")
@@ -38,14 +37,15 @@ assert JIRA_PASSWORD != None
 JIRA_PROJECT = os.getenv("JIRA_PROJECT")
 assert JIRA_PROJECT != None
 
-REQUEST_TIMEOUT = 10
 REPO_SYNC_INTERVAL = 60 * 60 * 24     # full sync once a day
 
 app = Flask(__name__)
-logging.getLogger('jiralib').addHandler(default_handler)
+#logging.getLogger('jiralib').addHandler(default_handler)
+#logging.getLogger('ghlib').addHandler(default_handler)
 logging.basicConfig(level=logging.INFO)
 
 jiraProject = jiralib.Jira(JIRA_URL, JIRA_USERNAME, JIRA_PASSWORD).getProject(JIRA_PROJECT)
+github = ghlib.GitHub(GH_API_URL, GH_USERNAME, GH_TOKEN)
 
 
 def auth_is_valid(signature, request_body):
@@ -85,15 +85,16 @@ def jira_webhook():
         return jsonify({}), 200
 
     repo_id, alert_num, _, _ = issue.get_alert_info()
+    ghrepo = ghlib.GHRepository(github, repo_id)
 
     try:
         if event == jiralib.UPDATE_EVENT:
             if issue.is_open():
-                open_alert(repo_id, alert_num)
+                ghrepo.open_alert(alert_num)
             elif issue.is_closed():
-                close_alert(repo_id, alert_num)
+                ghrepo.close_alert(alert_num)
         else:
-            close_alert(repo_id, alert_num)
+            ghrepo.close_alert(alert_num)
     except HTTPError as httpe:
         # A 404 suggests that the alert doesn't exist on the
         # Github side and that the JIRA issue is orphaned.
@@ -119,18 +120,24 @@ def github_webhook():
     if not auth_is_valid(request.headers.get("X-Hub-Signature-256", "not-provided"), request.data):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
+    json_dict = request.get_json()
+    repo_id = json_dict.get("repository", {}).get("full_name")
+    transition = json_dict.get("action")
+
     # When creating a webhook, GitHub will send a 'ping' to check whether the
     # instance is up. If we return a friendly code, the hook will mark as green in the UI.
     if request.headers.get("X-GitHub-Event", "") == "ping":
         return jsonify({}), 200
 
+    if request.headers.get("X-GitHub-Event", "") == "repository":
+        if action == 'deleted':
+            sync_repo(repo_id)
+        return jsonify({"code": 400, "error": "Wrong event type: " + request.headers.get("X-GitHub-Event", "")}), 400
+
     if request.headers.get("X-GitHub-Event", "") != "code_scanning_alert":
         return jsonify({"code": 400, "error": "Wrong event type: " + request.headers.get("X-GitHub-Event", "")}), 400
 
-    json_dict = request.get_json()
-    repo_name = json_dict.get("repository").get("full_name")
     alert = json_dict.get("alert")
-    transition = json_dict.get("action")
     alert_url = alert.get("html_url")
     alert_num = alert.get("number")
     rule_id = alert.get("rule").get("id")
@@ -138,13 +145,13 @@ def github_webhook():
 
     # TODO: We might want to do the following asynchronously, as it could
     # take time to do a full sync on a repo with many alerts / issues
-    last_sync = last_repo_syncs.get(repo_name, 0)
+    last_sync = last_repo_syncs.get(repo_id, 0)
     now = datetime.now().timestamp()
     if now - last_sync >= REPO_SYNC_INTERVAL:
-        last_repo_syncs[repo_name] = now
-        sync_repo(repo_name)
+        last_repo_syncs[repo_id] = now
+        sync_repo(repo_id)
 
-    return update_jira(repo_name,
+    return update_jira(repo_id,
                        transition,
                        alert_url,
                        alert_num,
@@ -152,7 +159,7 @@ def github_webhook():
                        rule_desc)
 
 
-def update_jira(repo_name, transition,
+def update_jira(repo_id, transition,
                 alert_url, alert_num,
                 rule_id, rule_desc):
     app.logger.debug('Received GITHUB webhook {action} for {alert_url}'.format(action=transition, alert_url=alert_url))
@@ -163,12 +170,14 @@ def update_jira(repo_name, transition,
         app.logger.debug('Nothing to do for "appeared_in_branch"')
         return jsonify({}), 200
 
-    if transition == "created":
-        jiraProject.create_issue(repo_name, rule_id, rule_desc, alert_url, alert_num)
-        return jsonify({}), 200
+    existing_issues = jiraProject.fetch_issues(repo_id, alert_num)
 
-    # if not creating a ticket, there should be an issue_id defined
-    existing_issues = jiraProject.fetch_issues(repo_name, alert_num)
+    if transition == "created":
+        if not existing_issues:
+            jiraProject.create_issue(repo_id, rule_id, rule_desc, alert_url, alert_num)
+        else:
+            app.logger.info('Issue already exists. Will not recreate it.')
+        return jsonify({}), 200
 
     if not existing_issues:
         return jsonify({"code": 400, "error": "Issue not found"}), 400
@@ -194,85 +203,15 @@ def update_jira(repo_name, transition,
     )
 
 
-def get_alerts(repo_id, state = None):
-    if state:
-        state = '&state=' + state
-    else:
-        state = ''
+def sync_repo(repo_id):
+    app.logger.info('Starting full sync for repository "{repo_id}"...'.format(repo_id=repo_id))
 
-    for page in itertools.count(start=1):
-        headers = {'Accept': 'application/vnd.github.v3+json'}
-        resp = requests.get('{api_url}/repos/{repo_id}/code-scanning/alerts?per_page=100&page={page}{state}'.format(
-                                api_url=GH_API_URL,
-                                repo_id=repo_id,
-                                page=page,
-                                state=state
-                            ),
-                            headers=headers,
-                            auth=(GH_USERNAME, GH_TOKEN),
-                            timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-
-        if not resp.json():
-            break
-
-        for a in resp.json():
-            yield a
-
-
-def get_alert(repo_id, alert_num):
-    headers = {'Accept': 'application/vnd.github.v3+json'}
-    resp = requests.get('{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
-                            api_url=GH_API_URL,
-                            repo_id=repo_id,
-                            alert_num=alert_num
-                        ),
-                        headers=headers,
-                        auth=(GH_USERNAME, GH_TOKEN),
-                        timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def open_alert(repo_id, alert_num):
-    state = get_alert(repo_id, alert_num)['state']
-    if state != 'open':
-        app.logger.info('Reopen alert {alert_num} of repository "{repo_id}".'.format(alert_num=alert_num, repo_id=repo_id))
-        update_alert(repo_id, alert_num, 'open')
-
-
-def close_alert(repo_id, alert_num):
-    state = get_alert(repo_id, alert_num)['state']
-    if state != 'dismissed':
-        app.logger.info('Closing alert {alert_num} of repository "{repo_id}".'.format(alert_num=alert_num, repo_id=repo_id))
-        update_alert(repo_id, alert_num, 'dismissed')
-
-
-def update_alert(repo_id, alert_num, state):
-    headers = {'Accept': 'application/vnd.github.v3+json'}
-    reason = ''
-    if state == 'dismissed':
-        reason = ', "dismissed_reason": "won\'t fix"'
-    data = '{{"state": "{state}"{reason}}}'.format(state=state, reason=reason)
-    resp = requests.patch('{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
-                              api_url=GH_API_URL,
-                              repo_id=repo_id,
-                              alert_num=alert_num
-                          ),
-                          data=data,
-                          headers=headers,
-                          auth=(GH_USERNAME, GH_TOKEN),
-                          timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
-
-
-def sync_repo(repo_name):
-    app.logger.info('Starting full sync for repository "{repo_name}"...'.format(repo_name=repo_name))
+    ghrepo = github.getRepository(repo_id)
 
     # fetch code scanning alerts from GitHub
     cs_alerts = []
     try:
-        cs_alerts = {util.make_key(repo_name + '/' + str(a['number'])): a for a in get_alerts(repo_name)}
+        cs_alerts = {util.make_key(repo_id + '/' + str(a['number'])): a for a in ghrepo.get_alerts()}
     except HTTPError as httpe:
         # if we receive a 404, the repository does not exist,
         # so we will delete all related JIRA alert issues
@@ -282,25 +221,31 @@ def sync_repo(repo_name):
 
     # fetch issues from JIRA and delete duplicates and ones which can't be matched
     jira_issues = {}
-    for i in jiraProject.fetch_issues(repo_name):
-        _, _, _, key = i.get_alert_info()
-        if key in jira_issues:
-            app.logger.info('Deleting duplicate jira alert issue {key}.'.format(key=i.key()))
+    for i in jiraProject.fetch_issues(repo_id):
+        _, _, _, akey = i.get_alert_info()
+        if akey in jira_issues:
+            app.logger.warning(
+                'JIRA alert issues {ikey1} and {ikey2} have identical alert key {akey}!'.format(
+                    ikey1=i.key(),
+                    ikey2=jira_issues[akey].key(),
+                    akey=akey
+                )
+            )
             i.delete()   # TODO - seems scary, are we sure....
-        elif key not in cs_alerts:
-            app.logger.info('Deleting orphaned jira alert issue {key}.'.format(key=i.key()))
+        elif akey not in cs_alerts:
+            app.logger.warning('JIRA alert issue {ikey} has no corresponding alert!'.format(ikey=i.key()))
             i.delete()   # TODO - seems scary, are we sure....
         else:
-            jira_issues[key] = i
+            jira_issues[akey] = i
 
     # create missing issues
-    for key in cs_alerts:
-        if key not in jira_issues:
-            alert = cs_alerts[key]
+    for akey in cs_alerts:
+        if akey not in jira_issues:
+            alert = cs_alerts[akey]
             rule = alert['rule']
 
-            jira_issues[key] = jiraProject.create_issue(
-                repo_name,
+            jira_issues[akey] = jiraProject.create_issue(
+                repo_id,
                 rule['id'],
                 rule['description'],
                 alert['html_url'],
@@ -308,9 +253,9 @@ def sync_repo(repo_name):
             )
 
     # adjust issue states
-    for key in cs_alerts:
-        alert = cs_alerts[key]
-        issue = jira_issues[key]
+    for akey in cs_alerts:
+        alert = cs_alerts[akey]
+        issue = jira_issues[akey]
         astatus = alert['state']
 
         if astatus == 'open':

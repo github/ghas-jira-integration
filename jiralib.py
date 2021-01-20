@@ -69,7 +69,7 @@ class JiraProject:
             repo_id=repo_id
         ))
 
-        return JiraIssue(raw)
+        return JiraIssue(self, raw)
 
 
     def fetch_issues(self, repo_name, alert_num=None):
@@ -103,15 +103,16 @@ class JiraIssue:
         return parse_alert_info(self.rawissue.fields.description)
 
 
-    def key():
+    def key(self):
         return self.rawissue.key
 
 
-    def id():
+    def id(self):
         return self.rawissue.id
 
 
     def delete(self):
+        logger.info('Deleting issue {ikey}.'.format(ikey=self.key()))
         self.rawissue.delete()
 
 
