@@ -3,6 +3,10 @@ import hashlib
 import re
 import util
 import logging
+import requests
+import json
+
+REQUEST_TIMEOUT = 10
 
 # May need to be changed depending on JIRA project type
 CLOSE_TRANSITION = "Done"
@@ -38,8 +42,51 @@ class Jira:
         self.token = token
         self.j = JIRA(url, auth=(user, token))
 
+
+    def auth(self):
+        return self.user, self.token
+
+
     def getProject(self, projectkey):
         return JiraProject(self, projectkey)
+
+
+    def list_hooks(self):
+        resp = requests.get(
+            '{api_url}/rest/webhooks/1.0/webhook'.format(api_url=self.url),
+            headers={'Content-Type': 'application/json'},
+            auth=self.auth(),
+            timeout=util.REQUEST_TIMEOUT
+        )
+        resp.raise_for_status()
+
+        for h in resp.json():
+            yield h
+
+
+    def create_hook(
+        self, name, url, secret,
+        events=['jira:issue_updated', 'jira:issue_deleted'],
+        filters={'issue-related-events-section': ''},
+        exclude_body=False
+    ):
+        data = json.dumps({
+            'name': name,
+            'url': url + '?secret_token=' + secret,
+            'events': events,
+            'filters': filters,
+            'excludeBody': exclude_body
+        })
+        resp = requests.post(
+            '{api_url}/rest/webhooks/1.0/webhook'.format(api_url=self.url),
+            headers={'Content-Type': 'application/json'},
+            data=data,
+            auth=self.auth(),
+            timeout=util.REQUEST_TIMEOUT
+        )
+        resp.raise_for_status()
+
+        return resp.json()
 
 
 class JiraProject:

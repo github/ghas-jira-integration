@@ -129,9 +129,11 @@ def github_webhook():
     if request.headers.get("X-GitHub-Event", "") == "ping":
         return jsonify({}), 200
 
+    githubrepository = ghlib.GHRepository(github, repo_id)
+
     if request.headers.get("X-GitHub-Event", "") == "repository":
-        if action == 'deleted':
-            sync_repo(repo_id)
+        if transition == 'deleted':
+            util.sync_repo(githubrepository, jiraProject)
         return jsonify({"code": 400, "error": "Wrong event type: " + request.headers.get("X-GitHub-Event", "")}), 400
 
     if request.headers.get("X-GitHub-Event", "") != "code_scanning_alert":
@@ -149,7 +151,7 @@ def github_webhook():
     now = datetime.now().timestamp()
     if now - last_sync >= REPO_SYNC_INTERVAL:
         last_repo_syncs[repo_id] = now
-        sync_repo(repo_id)
+        util.sync_repo(githubrepository, jiraProject)
 
     return update_jira(repo_id,
                        transition,
@@ -203,62 +205,3 @@ def update_jira(repo_id, transition,
     )
 
 
-def sync_repo(repo_id):
-    app.logger.info('Starting full sync for repository "{repo_id}"...'.format(repo_id=repo_id))
-
-    ghrepo = github.getRepository(repo_id)
-
-    # fetch code scanning alerts from GitHub
-    cs_alerts = []
-    try:
-        cs_alerts = {util.make_key(repo_id + '/' + str(a['number'])): a for a in ghrepo.get_alerts()}
-    except HTTPError as httpe:
-        # if we receive a 404, the repository does not exist,
-        # so we will delete all related JIRA alert issues
-        if httpe.response.status_code != 404:
-            # propagate everything else
-            raise
-
-    # fetch issues from JIRA and delete duplicates and ones which can't be matched
-    jira_issues = {}
-    for i in jiraProject.fetch_issues(repo_id):
-        _, _, _, akey = i.get_alert_info()
-        if akey in jira_issues:
-            app.logger.warning(
-                'JIRA alert issues {ikey1} and {ikey2} have identical alert key {akey}!'.format(
-                    ikey1=i.key(),
-                    ikey2=jira_issues[akey].key(),
-                    akey=akey
-                )
-            )
-            i.delete()   # TODO - seems scary, are we sure....
-        elif akey not in cs_alerts:
-            app.logger.warning('JIRA alert issue {ikey} has no corresponding alert!'.format(ikey=i.key()))
-            i.delete()   # TODO - seems scary, are we sure....
-        else:
-            jira_issues[akey] = i
-
-    # create missing issues
-    for akey in cs_alerts:
-        if akey not in jira_issues:
-            alert = cs_alerts[akey]
-            rule = alert['rule']
-
-            jira_issues[akey] = jiraProject.create_issue(
-                repo_id,
-                rule['id'],
-                rule['description'],
-                alert['html_url'],
-                alert['number']
-            )
-
-    # adjust issue states
-    for akey in cs_alerts:
-        alert = cs_alerts[akey]
-        issue = jira_issues[akey]
-        astatus = alert['state']
-
-        if astatus == 'open':
-            issue.open()
-        else:
-            issue.close()
