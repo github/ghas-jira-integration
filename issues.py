@@ -79,8 +79,8 @@ def jira_webhook():
         app.logger.debug('Ignoring JIRA webhook for issue not related to a code scanning alert.')
         return jsonify({}), 200
 
-    # we only care about updates and deletions
-    if event not in [jiralib.UPDATE_EVENT, jiralib.DELETE_EVENT]:
+    # we only care about updates to issues
+    if event not in [jiralib.UPDATE_EVENT]:
         app.logger.debug('Ignoring JIRA webhook for event "{event}".'.format(event=event))
         return jsonify({}), 200
 
@@ -88,12 +88,9 @@ def jira_webhook():
     ghrepo = ghlib.GHRepository(github, repo_id)
 
     try:
-        if event == jiralib.UPDATE_EVENT:
-            if issue.is_open():
-                ghrepo.open_alert(alert_num)
-            elif issue.is_closed():
-                ghrepo.close_alert(alert_num)
-        else:
+        if issue.is_open():
+            ghrepo.open_alert(alert_num)
+        elif issue.is_closed():
             ghrepo.close_alert(alert_num)
     except HTTPError as httpe:
         # A 404 suggests that the alert doesn't exist on the

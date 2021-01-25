@@ -15,7 +15,6 @@ OPEN_STATUS = "To Do"
 CLOSED_STATUS = "Done"
 
 # JIRA Webhook events
-DELETE_EVENT = 'jira:issue_deleted'
 UPDATE_EVENT = 'jira:issue_updated'
 
 DESC_TEMPLATE="""
@@ -66,7 +65,7 @@ class Jira:
 
     def create_hook(
         self, name, url, secret,
-        events=['jira:issue_updated', 'jira:issue_deleted'],
+        events=[UPDATE_EVENT],
         filters={'issue-related-events-section': ''},
         exclude_body=False
     ):
