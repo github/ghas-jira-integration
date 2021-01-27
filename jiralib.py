@@ -11,11 +11,14 @@ REQUEST_TIMEOUT = 10
 # May need to be changed depending on JIRA project type
 CLOSE_TRANSITION = "Done"
 REOPEN_TRANSITION = "To Do"
-OPEN_STATUS = "To Do"
 CLOSED_STATUS = "Done"
 
 # JIRA Webhook events
 UPDATE_EVENT = 'jira:issue_updated'
+CREATE_EVENT = 'jira:issue_created'
+DELETE_EVENT = 'jira:issue_deleted'
+
+TITLE_PREFIX = '[Code Scanning Alert]:'
 
 DESC_TEMPLATE="""
 {rule_desc}
@@ -25,7 +28,7 @@ DESC_TEMPLATE="""
 ----
 This issue was automatically generated from a GitHub alert, and will be automatically resolved once the underlying problem is fixed.
 DO NOT MODIFY DESCRIPTION BELOW LINE.
-REPOSITORY_NAME={repo_name}
+REPOSITORY_NAME={repo_id}
 ALERT_NUMBER={alert_num}
 REPOSITORY_KEY={repo_key}
 ALERT_KEY={alert_key}
@@ -65,7 +68,7 @@ class Jira:
 
     def create_hook(
         self, name, url, secret,
-        events=[UPDATE_EVENT],
+        events=[CREATE_EVENT, DELETE_EVENT, UPDATE_EVENT],
         filters={'issue-related-events-section': ''},
         exclude_body=False
     ):
@@ -98,14 +101,18 @@ class JiraProject:
     def create_issue(self, repo_id, rule_id, rule_desc, alert_url, alert_num):
         raw = self.j.create_issue(
             project=self.projectkey,
-            summary='{rule} in {repo}'.format(rule=rule_id, repo=repo_id),
+            summary='{prefix} {rule} in {repo}'.format(
+                prefix=TITLE_PREFIX,
+                rule=rule_id,
+                repo=repo_id
+            ),
             description=DESC_TEMPLATE.format(
                 rule_desc=rule_desc,
                 alert_url=alert_url,
-                repo_name=repo_id,
+                repo_id=repo_id,
                 alert_num=alert_num,
                 repo_key=util.make_key(repo_id),
-                alert_key=util.make_key(repo_id + '/' + str(alert_num))
+                alert_key=util.make_alert_key(repo_id, alert_num)
             ),
             issuetype={'name': 'Bug'}
         )
@@ -118,8 +125,11 @@ class JiraProject:
         return JiraIssue(self, raw)
 
 
-    def fetch_issues(self, repo_name, alert_num=None):
-        key = util.make_key(repo_name + (('/' + str(alert_num)) if alert_num is not None else ''))
+    def fetch_issues(self, repo_id, alert_num=None):
+        if alert_num is None:
+            key = util.make_key(repo_id)
+        else:
+            key = util.make_alert_key(repo_id, alert_num)
         issue_search = 'project={jira_project} and description ~ "{key}"'.format(
             jira_project=self.projectkey,
             key=key
@@ -162,20 +172,15 @@ class JiraIssue:
         self.rawissue.delete()
 
 
-    def is_open(self):
-        return self.rawissue.fields.status.name == OPEN_STATUS
+    def get_state(self):
+        return parse_state(self.rawissue.fields.status.name)
 
 
-    def is_closed(self):
-        return self.rawissue.fields.status.name == CLOSED_STATUS
-
-
-    def open(self):
-        self.transition(REOPEN_TRANSITION)
-
-
-    def close(self):
-        self.transition(CLOSE_TRANSITION)
+    def adjust_state(self, state):
+        if state:
+            self.transition(REOPEN_TRANSITION)
+        else:
+            self.transition(CLOSE_TRANSITION)
 
 
     def transition(self, transition):
@@ -188,27 +193,27 @@ class JiraIssue:
             ))
             raise Exception("Invalid JIRA transition")
 
-        old_issue_status = str(self.rawissue.fields.status)
+        old_issue_status = str(self.rawissue.fields.status.name)
 
-        if old_issue_status == OPEN_STATUS and transition == REOPEN_TRANSITION or \
-          old_issue_status == CLOSED_STATUS and transition == CLOSE_TRANSITION:
+        if self.get_state() and transition == REOPEN_TRANSITION or \
+        not self.get_state() and transition == CLOSE_TRANSITION:
             # nothing to do
             return
 
         self.j.transition_issue(self.rawissue, jira_transitions[transition])
 
+        action = 'Reopening' if transition == REOPEN_TRANSITION else 'Closing'
         logger.info(
-            'Adjusted status for issue {issue_key} from "{old_issue_status}" to "{new_issue_status}".'.format(
-                issue_key=self.rawissue.key,
-                old_issue_status=old_issue_status,
-                new_issue_status=CLOSED_STATUS if (old_issue_status == OPEN_STATUS) else OPEN_STATUS
+            '{action} issue {issue_key}'.format(
+                action=action,
+                issue_key=self.rawissue.key
             )
         )
 
 
 def parse_alert_info(desc):
     '''
-    Parse all the fieldsin an issue's description and return
+    Parse all the fields in an issue's description and return
     them as a tuple. If parsing fails for one of the fields,
     return a tuple of None's.
     '''
@@ -229,4 +234,14 @@ def parse_alert_info(desc):
     if m is None:
         return failed
     alert_key = m.group(1)
+
+    # consistency checks:
+    if repo_key != util.make_key(repo_id) \
+    or alert_key != util.make_alert_key(repo_id, alert_num):
+        return failed
+
     return repo_id, alert_num, repo_key, alert_key
+
+
+def parse_state(raw_state):
+    return raw_state != CLOSED_STATUS

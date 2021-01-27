@@ -1,16 +1,15 @@
 import os
 from flask import Flask, request, jsonify
 from flask.logging import default_handler
-from requests import HTTPError
 import json
 import hashlib
 import hmac
 import logging
 from datetime import datetime
-from types import SimpleNamespace
 import util
 import jiralib
 import ghlib
+import threading
 
 
 GH_API_URL = os.getenv("GH_API_URL")
@@ -44,8 +43,12 @@ app = Flask(__name__)
 #logging.getLogger('ghlib').addHandler(default_handler)
 logging.basicConfig(level=logging.INFO)
 
-jiraProject = jiralib.Jira(JIRA_URL, JIRA_USERNAME, JIRA_PASSWORD).getProject(JIRA_PROJECT)
+jira_project = jiralib.Jira(JIRA_URL, JIRA_USERNAME, JIRA_PASSWORD).getProject(JIRA_PROJECT)
 github = ghlib.GitHub(GH_API_URL, GH_USERNAME, GH_TOKEN)
+sync = util.Sync(github, jira_project, direction=util.DIRECTION_BOTH)
+sync_lock = threading.Lock()
+
+last_repo_syncs = {}
 
 
 def auth_is_valid(signature, request_body):
@@ -56,50 +59,35 @@ def auth_is_valid(signature, request_body):
     )
 
 
-last_repo_syncs = {}
-
-
 @app.route("/jira", methods=["POST"])
 def jira_webhook():
     """Handle POST requests coming from JIRA, and pass a translated request to GitHub"""
 
-    # Apparently, JIRA does not support an authentication mechanism for webhooks.
-    # To make it slightly more secure, we will just pass a secret token as a URL parameter
-    # In addition to that, it might be sensible to only whitelist the JIRA IP address
     if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), KEY):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    payload = json.loads(request.data.decode('utf-8'), object_hook=lambda p: SimpleNamespace(**p))
-    event = payload.webhookEvent
-    issue = jiralib.JiraIssue(jiraProject, payload.issue)
+    payload = json.loads(request.data.decode('utf-8'))
+    event = payload['webhookEvent']
+    desc = payload['issue']['fields']['description']
+    repo_id, _, _, _ = jiralib.parse_alert_info(desc)
 
     app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))
 
-    if not issue.is_managed():
+    if repo_id is None:
         app.logger.debug('Ignoring JIRA webhook for issue not related to a code scanning alert.')
         return jsonify({}), 200
 
-    # we only care about updates to issues
-    if event not in [jiralib.UPDATE_EVENT]:
-        app.logger.debug('Ignoring JIRA webhook for event "{event}".'.format(event=event))
-        return jsonify({}), 200
-
-    repo_id, alert_num, _, _ = issue.get_alert_info()
-    ghrepo = ghlib.GHRepository(github, repo_id)
-
-    try:
-        if issue.is_open():
-            ghrepo.open_alert(alert_num)
-        elif issue.is_closed():
-            ghrepo.close_alert(alert_num)
-    except HTTPError as httpe:
-        # A 404 suggests that the alert doesn't exist on the
-        # Github side and that the JIRA issue is orphaned.
-        # We simply ignore this, since it will be fixed during
-        # the next scheduled full sync.
-        if httpe.response.status_code != 404:
-            # propagate everything else
-            raise
+    with sync_lock:
+        # we only care about updates to issues
+        if event == jiralib.CREATE_EVENT:
+            sync.issue_created(desc)
+        elif event == jiralib.DELETE_EVENT:
+            sync.issue_deleted(desc)
+        elif event == jiralib.UPDATE_EVENT:
+            sync.issue_changed(desc)
+        else:
+            app.logger.debug('Ignoring JIRA webhook for event "{event}".'.format(event=event))
+            return jsonify({}), 200
 
     return jsonify({}), 200
 
@@ -130,7 +118,8 @@ def github_webhook():
 
     if request.headers.get("X-GitHub-Event", "") == "repository":
         if transition == 'deleted':
-            util.sync_repo(githubrepository, jiraProject)
+            with sync_lock:
+                sync.sync_repo(repo_id)
         return jsonify({"code": 400, "error": "Wrong event type: " + request.headers.get("X-GitHub-Event", "")}), 400
 
     if request.headers.get("X-GitHub-Event", "") != "code_scanning_alert":
@@ -148,57 +137,27 @@ def github_webhook():
     now = datetime.now().timestamp()
     if now - last_sync >= REPO_SYNC_INTERVAL:
         last_repo_syncs[repo_id] = now
-        util.sync_repo(githubrepository, jiraProject)
+        with sync_lock:
+            sync.sync_repo(repo_id)
 
-    return update_jira(repo_id,
-                       transition,
-                       alert_url,
-                       alert_num,
-                       rule_id,
-                       rule_desc)
-
-
-def update_jira(repo_id, transition,
-                alert_url, alert_num,
-                rule_id, rule_desc):
     app.logger.debug('Received GITHUB webhook {action} for {alert_url}'.format(action=transition, alert_url=alert_url))
 
     # we deal with each action type individually, showing the expected
     # behaviour and response codes explicitly
-    if transition == "appeared_in_branch":
-        app.logger.debug('Nothing to do for "appeared_in_branch"')
-        return jsonify({}), 200
-
-    existing_issues = jiraProject.fetch_issues(repo_id, alert_num)
-
-    if transition == "created":
-        if not existing_issues:
-            jiraProject.create_issue(repo_id, rule_id, rule_desc, alert_url, alert_num)
+    with sync_lock:
+        if transition == "appeared_in_branch":
+            app.logger.debug('Nothing to do for "appeared_in_branch"')
+        elif transition == "created":
+            sync.alert_created(repo_id, alert_num)
+        elif transition in ["closed_by_user", "reopened_by_user", "reopened"]:
+            sync.alert_changed(repo_id, alert_num)
+        elif transition == "fixed":
+            sync.alert_fixed(repo_id, alert_num)
         else:
-            app.logger.info('Issue already exists. Will not recreate it.')
-        return jsonify({}), 200
+            # when the transition is not recognised, we return a bad request response
+            return (
+                jsonify({"code": 400, "error": "unknown transition type - %s" % transition}),
+                400,
+            )
 
-    if not existing_issues:
-        return jsonify({"code": 400, "error": "Issue not found"}), 400
-
-    if len(existing_issues) > 1:
-        app.logger.warning('Multiple issues found. Selecting by min id.')
-        existing_issues.sort(key=lambda i: i.id())
-
-    issue = existing_issues[0]
-
-    if transition in ["closed_by_user", "fixed"]:
-        issue.close()
-        return jsonify({}), 200
-
-    if transition in ["reopened_by_user", "reopened"]:
-        issue.open()
-        return jsonify({}), 200
-
-    # when the transition is not recognised, we return a bad request response
-    return (
-        jsonify({"code": 400, "error": "unknown transition type - %s" % transition}),
-        400,
-    )
-
-
+    return jsonify({}), 200

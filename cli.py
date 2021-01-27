@@ -13,7 +13,13 @@ def fail(msg):
 
 
 def serve(args):
-    pass
+    github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
+    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+    jp = jira.getProject(args.jira_project)
+    i = jp.create_issue('repo/id', 'rule_id', 'rule_desc', 'alert_url', '15')
+    results = jp.fetch_issues('repo/id', '15')
+    print(len(results))
+
 
 
 def sync(args):
@@ -150,13 +156,13 @@ def main():
     subparsers = parser.add_subparsers()
 
     # serve
-    serve = subparsers.add_parser(
+    serve_parser = subparsers.add_parser(
         'serve',
         parents=[credential_base],
         help='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync',
         description='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync'
     )
-    serve.set_defaults(func=serve)
+    serve_parser.set_defaults(func=serve)
 
     # sync
     sync_parser = subparsers.add_parser(

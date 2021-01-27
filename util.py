@@ -1,10 +1,17 @@
 import hashlib
 from requests import HTTPError
 import logging
+from datetime import datetime
+import jiralib
+import ghlib
 
 REQUEST_TIMEOUT = 10
 
 logger = logging.getLogger(__name__)
+
+DIRECTION_G2J = 1
+DIRECTION_J2G = 2
+DIRECTION_BOTH = 3
 
 
 def make_key(s):
@@ -13,66 +20,138 @@ def make_key(s):
     return sha_1.hexdigest()
 
 
+def make_alert_key(repo_id, alert_num):
+    return make_key(repo_id + '/' + str(alert_num))
+
+
 def json_accept_header():
     return {'Accept': 'application/vnd.github.v3+json'}
 
 
-def sync_repo(ghrepository, jiraproject):
-    repo_id = ghrepository.repo_id
+class Sync:
+    def __init__(self, github, jira_project, direction=DIRECTION_BOTH):
+        self.github = github
+        self.jira = jira_project
+        self.direction = direction
 
-    logger.info('Starting full sync for repository "{repo_id}"...'.format(repo_id=repo_id))
 
-    # fetch code scanning alerts from GitHub
-    cs_alerts = []
-    try:
-        cs_alerts = {make_key(repo_id + '/' + str(a['number'])): a for a in ghrepository.get_alerts()}
-    except HTTPError as httpe:
-        # if we receive a 404, the repository does not exist,
-        # so we will delete all related JIRA alert issues
-        if httpe.response.status_code != 404:
-            # propagate everything else
-            raise
+    def alert_created(self, repo_id, alert_num):
+        self.sync(
+            self.github.getRepository(repo_id).get_alert(alert_num),
+            self.jira.fetch_issues(repo_id, alert_num),
+            DIRECTION_G2J
+        )
 
-    # fetch issues from JIRA and delete duplicates and ones which can't be matched
-    jira_issues = {}
-    for i in jiraproject.fetch_issues(repo_id):
-        _, _, _, akey = i.get_alert_info()
-        if akey in jira_issues:
-            logger.warning(
-                'JIRA alert issues {ikey1} and {ikey2} have identical alert key {akey}!'.format(
-                    ikey1=i.key(),
-                    ikey2=jira_issues[akey].key(),
-                    akey=akey
-                )
+
+    def alert_changed(self, repo_id, alert_num):
+        self.sync(
+            self.github.getRepository(repo_id).get_alert(alert_num),
+            self.jira.fetch_issues(repo_id, alert_num),
+            DIRECTION_G2J
+        )
+
+
+    def alert_fixed(self, repo_id, alert_num):
+        self.sync(
+            self.github.getRepository(repo_id).get_alert(alert_num),
+            self.jira.fetch_issues(repo_id, alert_num),
+            DIRECTION_G2J
+        )
+
+
+    def issue_created(self, desc):
+        repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
+        self.sync(
+            self.github.getRepository(repo_id).get_alert(alert_num),
+            self.jira.fetch_issues(repo_id, alert_num),
+            DIRECTION_J2G
+        )
+
+
+    def issue_changed(self, desc):
+        repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
+        self.sync(
+            self.github.getRepository(repo_id).get_alert(alert_num),
+            self.jira.fetch_issues(repo_id, alert_num),
+            DIRECTION_J2G
+        )
+
+
+    def issue_deleted(self, desc):
+        repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
+        self.sync(
+            self.github.getRepository(repo_id).get_alert(alert_num),
+            self.jira.fetch_issues(repo_id, alert_num),
+            DIRECTION_J2G
+        )
+
+
+    def sync(self, alert, issues, in_direction):
+        if alert is None:
+            # there is no alert, so we have to remove all issues
+            # that have ever been associated with it
+            for i in issues:
+                i.delete()
+            return
+
+        # make sure that each alert has at least
+        # one issue associated with it
+        if len(issues) == 0:
+            newissue = self.jira.create_issue(
+                alert.github_repo.repo_id,
+                alert.json['rule']['id'],
+                alert.json['rule']['description'],
+                alert.json['html_url'],
+                alert.json['number']
             )
-            i.delete()   # TODO - seems scary, are we sure....
-        elif akey not in cs_alerts:
-            logger.warning('JIRA alert issue {ikey} has no corresponding alert!'.format(ikey=i.key()))
-            i.delete()   # TODO - seems scary, are we sure....
+            newissue.adjust_state(alert.get_state())
+            issues.append(newissue)
+
+        # make sure that each alert has at max
+        # one issue associated with it
+        if len(issues) > 1:
+            issues.sort(key=lambda i: i.id())
+            for i in issues[1:]:
+                i.delete()
+
+        issue = issues[0]
+
+        # make sure alert and issue are in the same state
+        if self.direction & DIRECTION_G2J and self.direction & DIRECTION_J2G:
+            d = in_direction
         else:
-            jira_issues[akey] = i
+            d = self.direction
 
-    # create missing issues
-    for akey in cs_alerts:
-        if akey not in jira_issues:
-            alert = cs_alerts[akey]
-            rule = alert['rule']
-
-            jira_issues[akey] = jiraproject.create_issue(
-                repo_id,
-                rule['id'],
-                rule['description'],
-                alert['html_url'],
-                alert['number']
-            )
-
-    # adjust issue states
-    for akey in cs_alerts:
-        alert = cs_alerts[akey]
-        issue = jira_issues[akey]
-        astatus = alert['state']
-
-        if astatus == 'open':
-            issue.open()
+        if d & DIRECTION_G2J or alert.is_fixed():
+            # The user treats GitHub as the source of truth.
+            # Also, if the alert to be synchronized is already "fixed"
+            # then even if the user treats JIRA as the source of truth,
+            # we have to push back the state to JIRA, because "fixed"
+            # alerts cannot be transitioned to "open"
+            issue.adjust_state(alert.get_state())
         else:
-            issue.close()
+            # The user treats JIRA as the source of truth
+            alert.adjust_state(issue.get_state())
+
+
+    def sync_repo(self, repo_id):
+        logger.info('Performing full sync on repository {repo_id}...'.format(
+            repo_id=repo_id
+        ))
+
+        pairs = {}
+
+        # gather alerts
+        for a in self.github.getRepository(repo_id).get_alerts():
+            k = make_alert_key(repo_id, a.json['number'])
+            pairs[k] = (a, [])
+
+        # gather issues
+        for i in self.jira.fetch_issues(repo_id):
+            _, _, _, akey = i.get_alert_info()
+            if not akey in pairs:
+                pairs[akey] = (None, [])
+            pairs[akey][1].append(i)
+
+        for _, (alert, issues) in pairs.items():
+            self.sync(alert, issues, DIRECTION_G2J)    # TODO: We might want to make the direction configurable here

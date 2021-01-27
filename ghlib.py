@@ -3,6 +3,7 @@ import itertools
 import logging
 import json
 import util
+from requests import HTTPError
 
 
 WEBHOOK_CONFIG = '''
@@ -116,6 +117,7 @@ class GitHub:
         resp.raise_for_status()
         return resp.json()
 
+
 class GHRepository:
     def __init__(self, github, repo_id):
         self.gh = github
@@ -159,13 +161,20 @@ class GHRepository:
                 auth=self.gh.auth(),
                 timeout=util.REQUEST_TIMEOUT
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+                if not resp.json():
+                    break
 
-            if not resp.json():
-                break
-
-            for a in resp.json():
-                yield a
+                for a in resp.json():
+                    yield GHAlert(self, a)
+            except HTTPError as httpe:
+                if httpe.response.status_code == 404:
+                    # A 404 suggests that the repository doesn't exist
+                    break
+                else:
+                    # propagate everything else
+                    raise
 
 
     def get_alert(self, alert_num):
@@ -179,44 +188,61 @@ class GHRepository:
             auth=self.gh.auth(),
             timeout=util.REQUEST_TIMEOUT
         )
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp.raise_for_status()
+            return GHAlert(self, resp.json())
+        except HTTPError as httpe:
+            if httpe.response.status_code == 404:
+                # A 404 suggests that the alert doesn't exist
+                return None
+            else:
+                # propagate everything else
+                raise
 
 
-    def open_alert(self, alert_num):
-        state = self.get_alert(alert_num)['state']
-        if state != 'open':
-            logger.info(
-                'Reopen alert {alert_num} of repository "{repo_id}".'.format(
-                    alert_num=alert_num,
-                    repo_id=self.repo_id
-                )
+class GHAlert:
+    def __init__(self, github_repo, json):
+        self.github_repo =  github_repo
+        self.gh = github_repo.gh
+        self.json = json
+
+
+    def get_state(self):
+        return parse_alert_state(self.json['state'])
+
+
+    def adjust_state(self, state):
+        if state:
+            self.update('open')
+        else:
+            self.update('dismissed')
+
+
+    def is_fixed(self):
+        return self.json['state'] == 'fixed'
+
+
+    def update(self, alert_state):
+        if self.json['state'] == alert_state:
+            return
+
+        action = 'Reopening' if parse_alert_state(alert_state) else 'Closing'
+        logger.info(
+            '{action} alert {alert_num} of repository "{repo_id}".'.format(
+                action=action,
+                alert_num=self.json['number'],
+                repo_id=self.github_repo.repo_id
             )
-            self.update_alert(alert_num, 'open')
-
-
-    def close_alert(self, alert_num):
-        state = self.get_alert(alert_num)['state']
-        if state != 'dismissed':
-            logger.info(
-                'Closing alert {alert_num} of repository "{repo_id}".'.format(
-                    alert_num=alert_num,
-                    repo_id=self.repo_id
-                )
-            )
-            self.update_alert(alert_num, 'dismissed')
-
-
-    def update_alert(self, alert_num, state):
+        )
         reason = ''
-        if state == 'dismissed':
+        if alert_state == 'dismissed':
             reason = ', "dismissed_reason": "won\'t fix"'
-        data = '{{"state": "{state}"{reason}}}'.format(state=state, reason=reason)
+        data = '{{"state": "{state}"{reason}}}'.format(state=alert_state, reason=reason)
         resp = requests.patch(
             '{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
                 api_url=self.gh.url,
-                repo_id=self.repo_id,
-                alert_num=alert_num
+                repo_id=self.github_repo.repo_id,
+                alert_num=self.json['number']
             ),
             data=data,
             headers=util.json_accept_header(),
@@ -224,3 +250,7 @@ class GHRepository:
             timeout=util.REQUEST_TIMEOUT
         )
         resp.raise_for_status()
+
+
+def parse_alert_state(state_string):
+    return state_string not in ['dismissed', 'fixed']
