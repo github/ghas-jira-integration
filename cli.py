@@ -5,7 +5,14 @@ import os
 import sys
 import json
 import util
+import logging
 
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+root.addHandler(handler)
 
 def fail(msg):
     print(msg)
@@ -40,7 +47,7 @@ def sync(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    util.sync_repo(github.getRepository(args.gh_org + '/' + args.gh_repo), jira.getProject(args.jira_project))
+    util.Sync(github, jira.getProject(args.jira_project)).sync_repo(args.gh_org + '/' + args.gh_repo)
 
 
 def check_hooks(args):
