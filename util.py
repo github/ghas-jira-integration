@@ -154,4 +154,4 @@ class Sync:
             pairs[akey][1].append(i)
 
         for _, (alert, issues) in pairs.items():
-            self.sync(alert, issues, DIRECTION_G2J)    # TODO: We might want to make the direction configurable here
+            self.sync(alert, issues, DIRECTION_G2J)

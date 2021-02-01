@@ -6,6 +6,7 @@ import sys
 import json
 import util
 import logging
+import issues
 
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
@@ -14,19 +15,47 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 root.addHandler(handler)
 
+
 def fail(msg):
     print(msg)
     sys.exit(1)
 
 
+def direction_str_to_num(dstr):
+    if dstr == 'gh2jira':
+        return util.DIRECTION_G2J
+    elif dstr == 'jira2gh':
+        return util.DIRECTION_J2G
+    elif dstr == 'both':
+        return util.DIRECTION_BOTH
+    else:
+        fail('Unknown direction argument "{direction}"!'.format(direction=dstr))
+
+
 def serve(args):
+    if not args.gh_url or not args.jira_url:
+        fail('Both GitHub and JIRA URL have to be specified!')
+
+    if not args.gh_user or not args.gh_token:
+        fail('No GitHub credentials specified!')
+
+    if not args.jira_user or not args.jira_token:
+        fail('No JIRA credentials specified!')
+
+    if not args.jira_project:
+        fail('No JIRA project specified!')
+
+    if not args.secret:
+        fail('No Webhook secret specified!')
+
     github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    jp = jira.getProject(args.jira_project)
-    i = jp.create_issue('repo/id', 'rule_id', 'rule_desc', 'alert_url', '15')
-    results = jp.fetch_issues('repo/id', '15')
-    print(len(results))
-
+    sync = util.Sync(
+        github,
+        jira.getProject(args.jira_project),
+        direction=direction_str_to_num(args.direction)
+    )
+    issues.run_server(sync, args.secret)
 
 
 def sync(args):
@@ -39,6 +68,9 @@ def sync(args):
     if not args.jira_user or not args.jira_token:
         fail('No JIRA credentials specified!')
 
+    if not args.jira_project:
+        fail('No JIRA project specified!')
+
     if not args.gh_org:
         fail('No GitHub organization specified!')
 
@@ -47,7 +79,11 @@ def sync(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    util.Sync(github, jira.getProject(args.jira_project)).sync_repo(args.gh_org + '/' + args.gh_repo)
+    util.Sync(
+        github,
+        jira.getProject(args.jira_project),
+        direction=direction_str_to_num(args.direction)
+    ).sync_repo(args.gh_org + '/' + args.gh_repo)
 
 
 def check_hooks(args):
@@ -58,7 +94,7 @@ def install_hooks(args):
     if not args.hook_url:
         fail('No hook URL specified!')
 
-    if not args.hook_secret:
+    if not args.secret:
         fail('No hook secret specified!')
 
     if not args.gh_url and not args.jira_url:
@@ -76,16 +112,16 @@ def install_hooks(args):
 
         if args.gh_repo:
             ghrepo = github.getRepository(args.gh_org + '/' + args.gh_repo)
-            ghrepo.create_hook(url=args.hook_url, secret=args.hook_secret)
+            ghrepo.create_hook(url=args.hook_url, secret=args.secret)
         else:
-            github.create_org_hook(url=args.hook_url, secret=args.hook_secret)
+            github.create_org_hook(url=args.hook_url, secret=args.secret)
 
     # user wants to install a JIRA hook
     if args.jira_url:
         if not args.jira_user or not args.jira_token:
             fail('No JIRA credentials specified!')
         jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-        jira.create_hook('github_jira_synchronization_hook', args.hook_url, args.hook_secret)
+        jira.create_hook('github_jira_synchronization_hook', args.hook_url, args.secret)
 
 
 def list_hooks(args):
@@ -158,6 +194,18 @@ def main():
         '--jira-project',
         help='JIRA project key'
     )
+    credential_base.add_argument(
+        '--secret',
+        help='Webhook secret'
+    )
+
+    direction_base = argparse.ArgumentParser(add_help=False)
+    direction_base.add_argument(
+        '--direction',
+        help='Sync direction. Possible values are "gh2jira" (alert states have higher priority than issue states),'
+           + '"jira2gh" (issue states have higher priority than alert states) and "both" (adjust in both directions)',
+        default='both'
+    )
 
     parser = argparse.ArgumentParser(prog='cs2jira')
     subparsers = parser.add_subparsers()
@@ -165,7 +213,7 @@ def main():
     # serve
     serve_parser = subparsers.add_parser(
         'serve',
-        parents=[credential_base],
+        parents=[credential_base, direction_base],
         help='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync',
         description='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync'
     )
@@ -174,7 +222,7 @@ def main():
     # sync
     sync_parser = subparsers.add_parser(
         'sync',
-        parents=[credential_base],
+        parents=[credential_base, direction_base],
         help='Synchronize GitHub alerts and JIRA tickets for a given repository',
         description='Synchronize GitHub alerts and JIRA tickets for a given repository'
     )
@@ -205,10 +253,6 @@ def main():
         parents=[credential_base],
         help='Install existing GitHub or JIRA webhooks',
         description='Install GitHub or JIRA webhooks'
-    )
-    hooks_install.add_argument(
-        '--hook-secret',
-        help='Webhook secret'
     )
     hooks_install.add_argument(
         '--hook-url',

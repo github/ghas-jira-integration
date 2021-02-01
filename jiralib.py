@@ -184,6 +184,13 @@ class JiraIssue:
 
 
     def transition(self, transition):
+        old_issue_status = str(self.rawissue.fields.status.name)
+
+        if self.get_state() and transition == REOPEN_TRANSITION or \
+        not self.get_state() and transition == CLOSE_TRANSITION:
+            # nothing to do
+            return
+
         jira_transitions = {t['name'] : t['id'] for t in self.j.transitions(self.rawissue)}
         if transition not in jira_transitions:
             logger.error('Transition "{transition}" not available for {issue_key}. Valid transitions: {jira_transitions}'.format(
@@ -192,13 +199,6 @@ class JiraIssue:
                 jira_transitions=list(jira_transitions)
             ))
             raise Exception("Invalid JIRA transition")
-
-        old_issue_status = str(self.rawissue.fields.status.name)
-
-        if self.get_state() and transition == REOPEN_TRANSITION or \
-        not self.get_state() and transition == CLOSE_TRANSITION:
-            # nothing to do
-            return
 
         self.j.transition_issue(self.rawissue, jira_transitions[transition])
 

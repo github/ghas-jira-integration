@@ -12,50 +12,33 @@ import ghlib
 import threading
 
 
-GH_API_URL = os.getenv("GH_API_URL")
-assert GH_API_URL != None
-
-GH_USERNAME = os.getenv("GH_USERNAME", "").encode("utf-8")
-assert GH_USERNAME != "".encode("utf-8")
-
-GH_TOKEN = os.getenv("GH_TOKEN", "").encode("utf-8")
-assert GH_TOKEN != "".encode("utf-8")
-
-KEY = os.getenv("SECRET_TOKEN", "").encode("utf-8")
-assert KEY != "".encode("utf-8")
-
-JIRA_URL = os.getenv("JIRA_URL")
-assert JIRA_URL != None
-
-JIRA_USERNAME = os.getenv("JIRA_USERNAME")
-assert JIRA_USERNAME != None
-
-JIRA_PASSWORD = os.getenv("JIRA_PASSWORD")
-assert JIRA_PASSWORD != None
-
-JIRA_PROJECT = os.getenv("JIRA_PROJECT")
-assert JIRA_PROJECT != None
-
-REPO_SYNC_INTERVAL = 60 * 60 * 24     # full sync once a day
-
+sync = None
+repo_sync_interval = None
 app = Flask(__name__)
+sync_lock = threading.Lock()
+last_repo_syncs = {}
+secret = None
+
+
+def run_server(sync_object, webhook_secret, repository_sync_interval=60 * 60 * 24, port=5000):
+    global sync
+    sync = sync_object
+    global secret
+    secret = webhook_secret.encode('utf-8')
+    global repo_sync_interval
+    repo_sync_interval = repository_sync_interval
+    app.run(port=port)
+
 #logging.getLogger('jiralib').addHandler(default_handler)
 #logging.getLogger('ghlib').addHandler(default_handler)
-logging.basicConfig(level=logging.INFO)
-
-jira_project = jiralib.Jira(JIRA_URL, JIRA_USERNAME, JIRA_PASSWORD).getProject(JIRA_PROJECT)
-github = ghlib.GitHub(GH_API_URL, GH_USERNAME, GH_TOKEN)
-sync = util.Sync(github, jira_project, direction=util.DIRECTION_BOTH)
-sync_lock = threading.Lock()
-
-last_repo_syncs = {}
+#logging.basicConfig(level=logging.INFO)
 
 
 def auth_is_valid(signature, request_body):
     if app.debug:
         return True
     return hmac.compare_digest(
-        signature.encode('utf-8'), ('sha256=' + hmac.new(KEY, request_body, hashlib.sha256).hexdigest()).encode('utf-8')
+        signature.encode('utf-8'), ('sha256=' + hmac.new(secret, request_body, hashlib.sha256).hexdigest()).encode('utf-8')
     )
 
 
@@ -63,13 +46,13 @@ def auth_is_valid(signature, request_body):
 def jira_webhook():
     """Handle POST requests coming from JIRA, and pass a translated request to GitHub"""
 
-    if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), KEY):
+    if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), secret):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
     payload = json.loads(request.data.decode('utf-8'))
     event = payload['webhookEvent']
     desc = payload['issue']['fields']['description']
-    repo_id, _, _, _ = jiralib.parse_alert_info(desc)
+    repo_id, alert_id, _, _ = jiralib.parse_alert_info(desc)
 
     app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))
 
@@ -105,16 +88,14 @@ def github_webhook():
     if not auth_is_valid(request.headers.get("X-Hub-Signature-256", "not-provided"), request.data):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    json_dict = request.get_json()
-    repo_id = json_dict.get("repository", {}).get("full_name")
-    transition = json_dict.get("action")
-
     # When creating a webhook, GitHub will send a 'ping' to check whether the
     # instance is up. If we return a friendly code, the hook will mark as green in the UI.
     if request.headers.get("X-GitHub-Event", "") == "ping":
         return jsonify({}), 200
 
-    githubrepository = ghlib.GHRepository(github, repo_id)
+    json_dict = request.get_json()
+    repo_id = json_dict.get("repository", {}).get("full_name")
+    transition = json_dict.get("action")
 
     if request.headers.get("X-GitHub-Event", "") == "repository":
         if transition == 'deleted':
@@ -135,7 +116,7 @@ def github_webhook():
     # take time to do a full sync on a repo with many alerts / issues
     last_sync = last_repo_syncs.get(repo_id, 0)
     now = datetime.now().timestamp()
-    if now - last_sync >= REPO_SYNC_INTERVAL:
+    if now - last_sync >= repo_sync_interval:
         last_repo_syncs[repo_id] = now
         with sync_lock:
             sync.sync_repo(repo_id)
