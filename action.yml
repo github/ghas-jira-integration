@@ -1,0 +1,26 @@
+name: 'Sync Code Scanning and JIRA'
+description: "Let's you manage Code Scanning alerts from JIRA by creating an
+              issue for each alert and keeping the states synced."
+inputs:
+  jira_url:
+    description: 'URL of the JIRA instance'
+    required: true
+  jira_user:
+    description: 'JIRA account with the required permissions'
+    required: true
+  jira_token:
+    description: 'JIRA password or token'
+    required: true
+  jira_project:
+    description: 'JIRA project key'
+    required: true
+  github_token:
+    description: 'GitHub API token with the required permissions'
+    required: true
+  sync_direction:
+    description: 'Which direction to synchronize in (gh2jira, jira2gh)'
+    required: false
+    default: "gh2jira"
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
