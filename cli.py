@@ -6,7 +6,7 @@ import sys
 import json
 import util
 import logging
-import issues
+import server
 
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
@@ -55,7 +55,7 @@ def serve(args):
         jira.getProject(args.jira_project),
         direction=direction_str_to_num(args.direction)
     )
-    issues.run_server(sync, args.secret)
+    server.run_server(sync, args.secret)
 
 
 def sync(args):
