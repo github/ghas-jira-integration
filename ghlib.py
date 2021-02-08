@@ -1,5 +1,4 @@
 import requests
-import itertools
 import logging
 import json
 import util
@@ -46,24 +45,33 @@ class GitHub:
             etype = 'repos'
         else:
             etype = 'orgs'
-        for page in itertools.count(start=1):
-            resp = requests.get(
-                '{api_url}/{etype}/{ename}/hooks?per_page=100&page={page}'.format(
-                    api_url=self.url,
-                    etype=etype,
-                    ename=entity,
-                    page=page
-                ),
-                headers=self.default_headers(),
-                timeout=util.REQUEST_TIMEOUT
-            )
-            resp.raise_for_status()
 
-            if not resp.json():
-                break
+        resp = requests.get(
+            '{api_url}/{etype}/{ename}/hooks?per_page=100'.format(
+                api_url=self.url,
+                etype=etype,
+                ename=entity
+            ),
+            headers=self.default_headers(),
+            timeout=util.REQUEST_TIMEOUT
+        )
+
+        while True:
+            resp.raise_for_status()
 
             for h in resp.json():
                 yield h
+
+            nextpage = resp.links.get('next', {}).get('url', None)
+            if not nextpage:
+                break
+
+            resp = requests.get(
+                nextpage,
+                headers=self.default_headers(),
+                timeout=util.REQUEST_TIMEOUT
+            )
+
 
     def create_org_hook(
         self, org, url,
@@ -148,31 +156,41 @@ class GHRepository:
         else:
             state = ''
 
-        for page in itertools.count(start=1):
+        try:
             resp = requests.get(
-                '{api_url}/repos/{repo_id}/code-scanning/alerts?per_page=100&page={page}{state}'.format(
+                '{api_url}/repos/{repo_id}/code-scanning/alerts?per_page=100{state}'.format(
                     api_url=self.gh.url,
                     repo_id=self.repo_id,
-                    page=page,
                     state=state
                 ),
                 headers=self.gh.default_headers(),
                 timeout=util.REQUEST_TIMEOUT
             )
-            try:
+
+            while True:
                 resp.raise_for_status()
-                if not resp.json():
-                    break
 
                 for a in resp.json():
                     yield GHAlert(self, a)
-            except HTTPError as httpe:
-                if httpe.response.status_code == 404:
-                    # A 404 suggests that the repository doesn't exist
+
+                nextpage = resp.links.get('next', {}).get('url', None)
+                if not nextpage:
                     break
-                else:
-                    # propagate everything else
-                    raise
+
+                resp = requests.get(
+                    nextpage,
+                    headers=self.gh.default_headers(),
+                    timeout=util.REQUEST_TIMEOUT
+                )
+
+        except HTTPError as httpe:
+            if httpe.response.status_code == 404:
+                # A 404 suggests that the repository doesn't exist
+                # so we return an empty list
+                pass
+            else:
+                # propagate everything else
+                raise
 
 
     def get_alert(self, alert_num):
