@@ -1,50 +1,125 @@
-# LGTM issue tracker integration example
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black) [![Total alerts](https://img.shields.io/lgtm/alerts/g/Semmle/lgtm-issue-tracker-example.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/Semmle/lgtm-issue-tracker-example/alerts/)
+# `gh2jira` - Synchronize GitHub Code Scanning alerts and JIRA issues
 
-## Issue tracking in LGTM Enterprise
-
-[LGTM Enterprise](https://semmle.com/lgtm) gives customers the option of exporting alerts to any issue tracker, by sending webhook POST requests to the external service. Semmle provides an existing full-featured [add-on for Atlassian Jira](https://github.com/Semmle/lgtm-jira-addon), but other issue trackers need a lightweight application to act as translator for LGTM. This repository provides a basic example of how such an application might be implemented.
-
-Integration with external issue trackers is not available to users of [LGTM.com](https://lgtm.com).
+[GitHub's REST API](https://docs.github.com/en/rest) and [webhooks](https://docs.github.com/en/developers/webhooks-and-events/about-webhooks) give customers the option of exporting alerts to any issue tracker, by allowing users to fetch the data via API endpoints and / or by receiving webhook POST requests to a hosted server.
 
 ## This repository
 
-This project gives a quick illustrative example of how to integrate LGTM Enterprise with a third-party issue tracker. This code is intended as a proof-of-concept only, showing the basic operations necessary to handle incoming requests from LGTM. It is not intended for production use. Please feel free to use this as a starting point for your own integration, but if you are using Atlassian Jira see also the [LGTM Jira add-on](https://github.com/Semmle/lgtm-jira-addon).
+This repository gives a quick illustrative example of how to integrate GitHub Code Scanning with a third-party issue tracker - in this case JIRA Server. The example does not work with the cloud version of JIRA! The code is intended as a proof-of-concept, showing the basic operations necessary to handle incoming requests from GitHub. It is not intended for production use. Please feel free to use this as a starting point for your own integration.
 
-We use a lightweight `Flask` server to handle incoming requests, which in turn writes to the issue tracker of a specified GitHub repository. When not run in debug mode, incoming requests are verified using the secret specified when configuring the integration. For a more detailed explanation please see the associated [tutorial](tutorial.md).
+## Using the GitHub Action
 
-For instructions on configuring your LGTM Enterprise instance, please see the relevant [LGTM help pages](https://help.semmle.com/lgtm-enterprise/admin/help/adding-issue-trackers.html).
+The easiest way to use this tool is via its GitHub Action, which you can add to your workflows. Here is what you need before you can start:
 
-Integration with the GitHub issue tracker requires an access token for the GitHub installation, with appropriate permissions.
+* A GitHub repository with Code Scanning enabled and a few alerts. Follow [this guide](https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/setting-up-code-scanning-for-a-repository) to set up Code Scanning.
+* A GitHub `personal access token`, so that the action can fetch alerts from your repository. It might be sufficient to use `${{ secrets.GITHUB_TOKEN }}`, which is a token that GitHub automatically generates for your workflows. If not, follow [this guide](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) to obtain a dedicated token. It will have to have at least the `security_events` scope.
+* The URL of your JIRA Server instance.
+* A [JIRA project](https://confluence.atlassian.com/adminjiraserver/creating-a-project-938846813.html) to store your issues. You will need to provide its `project key` to the action.
+* A JIRA Server account (username + password) with the following permissions for the abovementioned project:
+  * `Browse Projects`
+  * `Close Issues`
+  * `Create Issues`
+  * `Delete Issues`
+  * `Edit Issues`
+  * `Transition Issues`
+* Depending on where you run your workflow, the JIRA Server instance must be accessible from either the [GitHub.com IP addresses](https://docs.github.com/en/github/authenticating-to-github/about-githubs-ip-addresses) or the address of your GitHub Enterprise Server instance.
 
-## Configuration
+Make sure you safely store all credentials as [GitHub Secrets](https://docs.github.com/en/actions/reference/encrypted-secrets). Finally, set up the following workflow in your repository, e.g. by adding the file `.github/workflows/jira-sync.yml`:
 
-When run through `pipenv` the app pull its configuration from the `.env` file, for which an example is provided:
-```bash
-FLASK_APP=issues.py
-FLASK_DEBUG=0
+```yaml
+name: "Sync with JIRA"
 
-GIT_REPO_URL=https://github.com/api/v3/repos/USERNAME/REPO/issues
-GIT_ACCESS_TOKEN=PERSONAL_ACCESS_TOKEN
+on:
+  schedule:
+    - cron: '*/10 * * * *'    # trigger synchronization every 10 minutes
 
-LGTM_SECRET=SECRET_AS_SPECIFIED_IN_LGTM_INTEGRATION_PANEL
+jobs:
+  test_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync with JIRA
+        uses: johnlugton/lgtm-issue-tracker-example@master
+        with:
+          github_token: '${{ secrets.GITHUB_TOKEN }}'
+          jira_url: '<INSERT JIRA SERVER URL>'
+          jira_user: '${{ secrets.JIRA_USER }}'
+          jira_token: '${{ secrets.JIRA_TOKEN }}'
+          jira_project: '<INSERT JIRA PROJECT KEY>'
+          sync_direction: 'gh2jira'
 ```
 
-## Running
-The easiest way to get the app running is with `pipenv`. Obviously a proper deployment would require something other than the built-in `Flask` development server.
+This action will push any changes (new alerts, alerts deleted, alert states changed) to JIRA, by creating, deleting or changing the state of the corresponding JIRA issues. If you set `sync_direction` to `jira2gh`, it will synchronize the other way. Currently, two-way integration is not yet possible via the action. If you need it, use the CLI's `serve` command (see below).
 
-Note: This example project requires a minimum of `python3.5`.
+## Using the CLI's `sync` command
+
+### Installation
+
+The easiest way to get the CLI running is with `pipenv`:
 
 ```bash
 pipenv install
-pipenv run flask run
+pipenv ./gh2jira --help
 ```
+
+Note: `gh2jira` requires a minimum of `python3.5`.
+
+In addition to the [usual requirements](#using-the-github-action) you also need the URL for the GitHub API, which is:
+* https://api.github.com if your repository is located on GitHub.com
+* https://your-hostname/api/v3/ if your repository is located on a GitHub Server instance
+
+```bash
+pipenv ./gh2jira sync
+                 --gh-url "<INSERT GITHUB API URL>"
+                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>"
+                 --gh-org "<INSERT REPO ORGANIZATON>"
+                 --gh-repo "<INSERT REPO NAME>"
+                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>"
+                 --jira-user "<INSERT JIRA USER>"
+                 --jira-token "<INSERT JIRA PASSWORD>"
+                 --jira-project "<INSERT JIRA PROJECT KEY>"
+                 --direction gh2jira
+```
+
+Note: Instead of the `--gh-token` and `--jira-token` options, you may also set the `GH2JIRA_GH_TOKEN` and `GH2JIRA_JIRA_TOKEN` environment variables.
+The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync. Currently, two-way integration is not yet possible via this command. If you need it, use the CLI's `serve` command (see below).
+
+## Using the CLI's `serve` command
+
+The following method is the most involved one, but currently the only one which allows two-way integration (i.e. changes to Code Scanning alerts trigger changes to JIRA issues and vice versa). It uses a lightweight `Flask` server to handle incoming JIRA and GitHub webhooks. The server is meant to be an example and not production-ready.
+
+In addition to the [usual requirements](#using-the-github-action) you also need:
+* A machine with an address that can be reached from GitHub.com or your GitHub Enterprise Server instance and your JIRA Server instance. This machine will run the server.
+* Webhooks set up, both, on GitHub and JIRA. On GitHub only repository or organization owners can do so. On JIRA it requires administrator access.
+* A secret which will be used to verify webhook requests.
+
+First, [create a GitHub webhook](https://docs.github.com/en/developers/webhooks-and-events/creating-webhooks) with the following event triggers:
+* [Code scanning alerts](https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads#code_scanning_alert)
+* [Repositories](https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads#repository)
+
+This can be either a repository or an organization-wide hook. Set the `Payload URL` to `https://<the machine>/github`, the `Content type` to `application/json` and insert your webhook `Secret`. Make sure to `Enable SSL verification`.
+
+Second, [register a webhook on JIRA](https://developer.atlassian.com/server/jira/platform/webhooks/#registering-a-webhook). Give your webhook a `Name` and enter the `URL`: `https://<the machine>/jira?secret_token=<INSERT WEBHOOK SECRET>`. In the `Events` section specify `All issues` and mark the boxes `created`, `updated` and `deleted`. Click `Save`.
+
+Finally, start the server:
+
+```bash
+pipenv ./gh2jira serve
+                 --gh-url "<INSERT GITHUB API URL>"
+                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>"
+                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>"
+                 --jira-user "<INSERT JIRA USER>"
+                 --jira-token "<INSERT JIRA PASSWORD>"
+                 --jira-project "<INSERT JIRA PROJECT KEY>"
+                 --secret "<INSERT WEBHOOK SECRET>"
+                 --port 5000
+                 --direction both
+```
+
+This will enable two-way integration between GitHub and JIRA. Note: Instead of the `--secret` option, you may also set the `GH2JIRA_SECRET` environment variable.
 
 ## Contributing
 
-We welcome contributions to our example LGTM issue tracker integration. While we intend this project to remain a minimal pedagogical example, if you have an idea how it could be made clearer or more valuable to other users, then please go ahead an open a pull request! Before you do, though, please take the time to read our [contributing guidelines](CONTRIBUTING.md).
+To be determined.
 
 ## License
 
-The LGTM issue tracker integration example is licensed under [Apache License 2.0](LICENSE) by [Semmle](https://semmle.com).
-
+To be determined.
