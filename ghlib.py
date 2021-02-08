@@ -21,14 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 class GitHub:
-    def __init__(self, url, user, token):
+    def __init__(self, url, token):
         self.url = url
-        self.user = user
         self.token = token
 
 
-    def auth(self):
-        return self.user, self.token
+    def default_headers(self):
+        auth = {'Authorization': 'token ' + self.token}
+        auth.update(util.json_accept_header())
+        return auth
 
 
     def getRepository(self, repo_id):
@@ -53,8 +54,7 @@ class GitHub:
                     ename=entity,
                     page=page
                 ),
-                headers=util.json_accept_header(),
-                auth=self.auth(),
+                headers=self.default_headers(),
                 timeout=util.REQUEST_TIMEOUT
             )
             resp.raise_for_status()
@@ -109,9 +109,8 @@ class GitHub:
                 ename=entity,
                 api_url=self.url
             ),
-            headers=util.json_accept_header(),
+            headers=self.default_headers(),
             data=data,
-            auth=self.auth(),
             timeout=util.REQUEST_TIMEOUT
         )
         resp.raise_for_status()
@@ -157,8 +156,7 @@ class GHRepository:
                     page=page,
                     state=state
                 ),
-                headers=util.json_accept_header(),
-                auth=self.gh.auth(),
+                headers=self.gh.default_headers(),
                 timeout=util.REQUEST_TIMEOUT
             )
             try:
@@ -184,8 +182,7 @@ class GHRepository:
                 repo_id=self.repo_id,
                 alert_num=alert_num
             ),
-            headers=util.json_accept_header(),
-            auth=self.gh.auth(),
+            headers=self.gh.default_headers(),
             timeout=util.REQUEST_TIMEOUT
         )
         try:
@@ -245,8 +242,7 @@ class GHAlert:
                 alert_num=self.json['number']
             ),
             data=data,
-            headers=util.json_accept_header(),
-            auth=self.gh.auth(),
+            headers=self.gh.default_headers(),
             timeout=util.REQUEST_TIMEOUT
         )
         resp.raise_for_status()
