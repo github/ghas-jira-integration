@@ -176,7 +176,8 @@ def main():
     )
     credential_base.add_argument(
         '--gh-token',
-        help='GitHub API token'
+        help='GitHub API token',
+        default=os.getenv('GH2JIRA_GH_TOKEN')
     )
     credential_base.add_argument(
         '--jira-url',
@@ -188,7 +189,8 @@ def main():
     )
     credential_base.add_argument(
         '--jira-token',
-        help='JIRA password'
+        help='JIRA password',
+        default=os.getenv('GH2JIRA_JIRA_TOKEN')
     )
     credential_base.add_argument(
         '--jira-project',
@@ -196,7 +198,8 @@ def main():
     )
     credential_base.add_argument(
         '--secret',
-        help='Webhook secret'
+        help='Webhook secret',
+        default=os.getenv('GH2JIRA_SECRET')
     )
 
     direction_base = argparse.ArgumentParser(add_help=False)
