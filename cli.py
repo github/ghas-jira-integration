@@ -55,7 +55,7 @@ def serve(args):
         jira.getProject(args.jira_project),
         direction=direction_str_to_num(args.direction)
     )
-    server.run_server(sync, args.secret)
+    server.run_server(sync, args.secret, port=args.port)
 
 
 def sync(args):
@@ -220,6 +220,11 @@ def main():
         parents=[credential_base, direction_base],
         help='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync',
         description='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync'
+    )
+    serve_parser.add_argument(
+        '--port',
+        help='The port the server will listen on',
+        default=5000
     )
     serve_parser.set_defaults(func=serve)
 
