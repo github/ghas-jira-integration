@@ -87,7 +87,12 @@ def sync(args):
 
 
 def check_hooks(args):
-    pass
+    github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
+    repo = github.getRepository(args.gh_org + '/' + args.gh_repo)
+    #for a in repo.get_alerts():
+    #    print(json.dumps(a.json, indent=2))
+    a = repo.get_alert(98)
+    print(json.dumps(a.json, indent=2))
 
 
 def install_hooks(args):
