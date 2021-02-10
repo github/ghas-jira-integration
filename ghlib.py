@@ -16,6 +16,8 @@ WEBHOOK_CONFIG = '''
 }
 '''
 
+RESULTS_PER_PAGE = 100
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,10 +49,11 @@ class GitHub:
             etype = 'orgs'
 
         resp = requests.get(
-            '{api_url}/{etype}/{ename}/hooks?per_page=100'.format(
+            '{api_url}/{etype}/{ename}/hooks?per_page={results_per_page}'.format(
                 api_url=self.url,
                 etype=etype,
-                ename=entity
+                ename=entity,
+                results_per_page=RESULTS_PER_PAGE
             ),
             headers=self.default_headers(),
             timeout=util.REQUEST_TIMEOUT
@@ -158,10 +161,11 @@ class GHRepository:
 
         try:
             resp = requests.get(
-                '{api_url}/repos/{repo_id}/code-scanning/alerts?per_page=100{state}'.format(
+                '{api_url}/repos/{repo_id}/code-scanning/alerts?per_page={results_per_page}{state}'.format(
                     api_url=self.gh.url,
                     repo_id=self.repo_id,
-                    state=state
+                    state=state,
+                    results_per_page=RESULTS_PER_PAGE
                 ),
                 headers=self.gh.default_headers(),
                 timeout=util.REQUEST_TIMEOUT
