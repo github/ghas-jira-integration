@@ -55,7 +55,7 @@ def serve(args):
         jira.getProject(args.jira_project),
         direction=direction_str_to_num(args.direction)
     )
-    server.run_server(sync, args.secret)
+    server.run_server(sync, args.secret, port=args.port)
 
 
 def sync(args):
@@ -177,7 +177,7 @@ def main():
     )
     credential_base.add_argument(
         '--gh-token',
-        help='GitHub API token',
+        help='GitHub API token. Alternatively, the GH2JIRA_GH_TOKEN may be set.',
         default=os.getenv('GH2JIRA_GH_TOKEN')
     )
     credential_base.add_argument(
@@ -190,7 +190,7 @@ def main():
     )
     credential_base.add_argument(
         '--jira-token',
-        help='JIRA password',
+        help='JIRA password. Alternatively, the GH2JIRA_JIRA_TOKEN may be set.',
         default=os.getenv('GH2JIRA_JIRA_TOKEN')
     )
     credential_base.add_argument(
@@ -199,7 +199,7 @@ def main():
     )
     credential_base.add_argument(
         '--secret',
-        help='Webhook secret',
+        help='Webhook secret. Alternatively, the GH2JIRA_SECRET may be set.',
         default=os.getenv('GH2JIRA_SECRET')
     )
 
@@ -220,6 +220,11 @@ def main():
         parents=[credential_base, direction_base],
         help='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync',
         description='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync'
+    )
+    serve_parser.add_argument(
+        '--port',
+        help='The port the server will listen on',
+        default=5000
     )
     serve_parser.set_defaults(func=serve)
 
