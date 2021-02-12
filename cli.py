@@ -247,7 +247,8 @@ def main():
     )
     sync_parser.add_argument(
         '--states-file',
-        help='File holding the current states.',
+        help='File holding the current states of all alerts. The program will create the' +
+             ' file if it doesn\'t exist and update it after each run.',
         default=None
     )
     sync_parser.set_defaults(func=sync)

@@ -80,7 +80,7 @@ pipenv run ./gh2jira sync
 ```
 
 Note: Instead of the `--gh-token` and `--jira-token` options, you may also set the `GH2JIRA_GH_TOKEN` and `GH2JIRA_JIRA_TOKEN` environment variables.
-The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync. Currently, two-way integration is not yet possible via this command. If you need it, use the CLI's `serve` command (see below).
+The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync. To allow two-way integration (via `--direction both`) you have to provide a states file via `--states-file states.json`. The CLI will create that file, if it doesn't exist!
 
 ## Using the CLI's `serve` command
 
