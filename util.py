@@ -4,6 +4,9 @@ import logging
 from datetime import datetime
 import jiralib
 import ghlib
+import json
+import os.path
+
 
 REQUEST_TIMEOUT = 10
 
@@ -28,10 +31,34 @@ def json_accept_header():
     return {'Accept': 'application/vnd.github.v3+json'}
 
 
+def states_from_file(states_file):
+    if not os.path.isfile(states_file):
+        states_to_file(states_file, {})   # create a file if it doesn't yet exist
+    with open(states_file, 'r') as f:
+        return json.load(f)
+
+
+def states_to_file(states_file, states):
+    with open(states_file, 'w') as f:
+        return json.dump(
+            states,
+            f,
+            indent=2,
+            sort_keys=True
+        )
+
+
 class Sync:
-    def __init__(self, github, jira_project, direction=DIRECTION_BOTH):
+    def __init__(
+        self,
+        github,
+        jira_project,
+        states=None,
+        direction=DIRECTION_BOTH
+    ):
         self.github = github
         self.jira = jira_project
+        self.states = {} if states is None else states
         self.direction = direction
 
 
@@ -92,7 +119,7 @@ class Sync:
             # that have ever been associated with it
             for i in issues:
                 i.delete()
-            return
+            return None
 
         # make sure that each alert has at least
         # one issue associated with it
@@ -105,7 +132,7 @@ class Sync:
                 alert.json['number']
             )
             newissue.adjust_state(alert.get_state())
-            issues.append(newissue)
+            return alert.get_state()
 
         # make sure that each alert has at max
         # one issue associated with it
@@ -129,9 +156,11 @@ class Sync:
             # we have to push back the state to JIRA, because "fixed"
             # alerts cannot be transitioned to "open"
             issue.adjust_state(alert.get_state())
+            return alert.get_state()
         else:
             # The user treats JIRA as the source of truth
             alert.adjust_state(issue.get_state())
+            return issue.get_state()
 
 
     def sync_repo(self, repo_id):
@@ -154,4 +183,16 @@ class Sync:
             pairs[akey][1].append(i)
 
         for _, (alert, issues) in pairs.items():
-            self.sync(alert, issues, DIRECTION_G2J)
+            k = alert.github_repo.repo_id + '/' + str(alert.json['number'])
+            past_state = self.states.get(k, None)
+            if alert.get_state() != past_state:
+                d = DIRECTION_G2J
+            else:
+                d = DIRECTION_J2G
+
+            new_state = self.sync(alert, issues, d)
+
+            if new_state is None:
+                self.states.pop(k, None)
+            else:
+                self.states[k] = new_state

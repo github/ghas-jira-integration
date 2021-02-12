@@ -79,11 +79,21 @@ def sync(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+
+    if args.states_file:
+        states = util.states_from_file(args.states_file)
+    else:
+        states = {}
+
     util.Sync(
         github,
         jira.getProject(args.jira_project),
+        states=states,
         direction=direction_str_to_num(args.direction)
     ).sync_repo(args.gh_org + '/' + args.gh_repo)
+
+    if args.states_file:
+        util.states_to_file(args.states_file, states)
 
 
 def check_hooks(args):
@@ -234,6 +244,11 @@ def main():
         parents=[credential_base, direction_base],
         help='Synchronize GitHub alerts and JIRA tickets for a given repository',
         description='Synchronize GitHub alerts and JIRA tickets for a given repository'
+    )
+    sync_parser.add_argument(
+        '--states-file',
+        help='File holding the current states.',
+        default=None
     )
     sync_parser.set_defaults(func=sync)
 
