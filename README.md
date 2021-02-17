@@ -4,7 +4,7 @@
 
 ## This repository
 
-This repository gives a quick illustrative example of how to integrate GitHub Code Scanning with a third-party issue tracker - in this case JIRA Server. The example does not work with the cloud version of JIRA! The code is intended as a proof-of-concept, showing the basic operations necessary to handle incoming requests from GitHub. It is not intended for production use. Please feel free to use this as a starting point for your own integration.
+This repository gives a quick illustrative example of how to integrate GitHub Code Scanning with a third-party issue tracker - in this case JIRA. The code is intended as a proof-of-concept, showing the basic operations necessary to handle incoming requests from GitHub. It is not intended for production use. Please feel free to use this as a starting point for your own integration.
 
 ## Using the GitHub Action
 
