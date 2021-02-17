@@ -42,7 +42,7 @@ class Jira:
         self.url = url
         self.user = user
         self.token = token
-        self.j = JIRA(url, auth=(user, token))
+        self.j = JIRA(url, basic_auth=(user, token))
 
 
     def auth(self):
