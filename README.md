@@ -23,7 +23,7 @@ The easiest way to use this tool is via its GitHub Action, which you can add to 
   * `Transition Issues`
 * Depending on where you run your workflow, the JIRA Server instance must be accessible from either the [GitHub.com IP addresses](https://docs.github.com/en/github/authenticating-to-github/about-githubs-ip-addresses) or the address of your GitHub Enterprise Server instance.
 
-Make sure you safely store all credentials as [GitHub Secrets](https://docs.github.com/en/actions/reference/encrypted-secrets). Finally, set up the following workflow in your repository, e.g. by adding the file `.github/workflows/jira-sync.yml`:
+Make sure you safely store all credentials as [GitHub Secrets](https://docs.github.com/en/actions/reference/encrypted-secrets). `GITHUB_TOKEN` is a [secret](https://docs.github.com/en/actions/reference/authentication-in-a-workflow#using-the-github_token-in-a-workflow) that is automatically created for you to use in your workflow. Finally, set up the following workflow in your repository, e.g. by adding the file `.github/workflows/jira-sync.yml`:
 
 ```yaml
 name: "Sync with JIRA"
@@ -57,7 +57,7 @@ The easiest way to get the CLI running is with `pipenv`:
 
 ```bash
 pipenv install
-pipenv ./gh2jira --help
+pipenv run ./gh2jira --help
 ```
 
 Note: `gh2jira` requires a minimum of `python3.5`.
@@ -67,7 +67,7 @@ In addition to the [usual requirements](#using-the-github-action) you also need 
 * https://your-hostname/api/v3/ if your repository is located on a GitHub Server instance
 
 ```bash
-pipenv ./gh2jira sync
+pipenv run ./gh2jira sync
                  --gh-url "<INSERT GITHUB API URL>"
                  --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>"
                  --gh-org "<INSERT REPO ORGANIZATON>"
@@ -102,7 +102,7 @@ Second, [register a webhook on JIRA](https://developer.atlassian.com/server/jira
 Finally, start the server:
 
 ```bash
-pipenv ./gh2jira serve
+pipenv run ./gh2jira serve
                  --gh-url "<INSERT GITHUB API URL>"
                  --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>"
                  --jira-url "<INSERT JIRA SERVER INSTANCE URL>"
