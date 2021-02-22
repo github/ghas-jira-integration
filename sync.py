@@ -1,9 +1,6 @@
 import jiralib
 import ghlib
 import logging
-import os.path
-import json
-import util
 
 logger = logging.getLogger(__name__)
 
@@ -12,34 +9,15 @@ DIRECTION_J2G = 2
 DIRECTION_BOTH = 3
 
 
-def states_from_file(states_file):
-    if not os.path.isfile(states_file):
-        states_to_file(states_file, {})   # create a file if it doesn't yet exist
-    with open(states_file, 'r') as f:
-        return json.load(f)
-
-
-def states_to_file(states_file, states):
-    with open(states_file, 'w') as f:
-        return json.dump(
-            states,
-            f,
-            indent=2,
-            sort_keys=True
-        )
-
-
 class Sync:
     def __init__(
         self,
         github,
         jira_project,
-        states=None,
         direction=DIRECTION_BOTH
     ):
         self.github = github
         self.jira = jira_project
-        self.states = {} if states is None else states
         self.direction = direction
 
 
@@ -110,7 +88,7 @@ class Sync:
                 alert.json['rule']['id'],
                 alert.json['rule']['description'],
                 alert.json['html_url'],
-                alert.json['number']
+                alert.number()
             )
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
@@ -144,29 +122,34 @@ class Sync:
             return issue.get_state()
 
 
-    def sync_repo(self, repo_id):
+    def sync_repo(self, repo_id, states=None):
         logger.info('Performing full sync on repository {repo_id}...'.format(
             repo_id=repo_id
         ))
 
+        states = {} if states is None else states
         pairs = {}
 
         # gather alerts
         for a in self.github.getRepository(repo_id).get_alerts():
-            k = make_alert_key(repo_id, a.json['number'])
-            pairs[k] = (a, [])
+            pairs[a.number()] = (a, [])
 
         # gather issues
         for i in self.jira.fetch_issues(repo_id):
-            _, _, _, akey = i.get_alert_info()
-            if not akey in pairs:
-                pairs[akey] = (None, [])
-            pairs[akey][1].append(i)
+            _, anum, _, _ = i.get_alert_info()
+            if not anum in pairs:
+                pairs[anum] = (None, [])
+            pairs[anum][1].append(i)
 
-        for _, (alert, issues) in pairs.items():
-            k = alert.github_repo.repo_id + '/' + str(alert.json['number'])
-            past_state = self.states.get(k, None)
-            if alert.get_state() != past_state:
+        # remove unused states
+        for k in list(states.keys()):
+            if not k in pairs:
+                del states[k]
+
+        # perform sync
+        for anum, (alert, issues) in pairs.items():
+            past_state = states.get(anum, None)
+            if alert is None or alert.get_state() != past_state:
                 d = DIRECTION_G2J
             else:
                 d = DIRECTION_J2G
@@ -174,6 +157,6 @@ class Sync:
             new_state = self.sync(alert, issues, d)
 
             if new_state is None:
-                self.states.pop(k, None)
+                states.pop(anum, None)
             else:
-                self.states[k] = new_state
+                states[anum] = new_state

@@ -1,6 +1,36 @@
 import hashlib
+import os.path
+import json
 
 REQUEST_TIMEOUT = 10
+
+
+def state_from_json(s):
+    # convert string keys into int keys
+    # this is necessary because JSON doesn't allow
+    # int keys and json.dump() automatically converts
+    # int keys into string keys.
+    return {int(k): v for k, v in json.loads(s).items()}
+
+
+def state_to_json(state):
+    return json.dumps(
+        state,
+        indent=2,
+        sort_keys=True
+    )
+
+
+def state_from_file(fpath):
+    if os.path.isfile(fpath):
+        with open(fpath, 'r') as f:
+            return state_from_json(f.read())
+    return {}
+
+
+def state_to_file(fpath, state):
+    with open(fpath, 'w') as f:
+        f.write(state_to_json(state))
 
 
 def make_key(s):
