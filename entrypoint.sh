@@ -9,4 +9,5 @@ cd / && pipenv run /gh2jira sync \
                             --jira-user "$INPUT_JIRA_USER" \
                             --jira-token "$INPUT_JIRA_TOKEN" \
                             --jira-project "$INPUT_JIRA_PROJECT" \
-                            --direction "$INPUT_SYNC_DIRECTION"
+                            --direction "$INPUT_SYNC_DIRECTION" \
+                            --state-issue -
