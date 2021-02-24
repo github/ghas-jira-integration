@@ -211,7 +211,7 @@ def main():
         default='both'
     )
 
-    parser = argparse.ArgumentParser(prog='cs2jira')
+    parser = argparse.ArgumentParser(prog='gh2jira')
     subparsers = parser.add_subparsers()
 
     # serve
