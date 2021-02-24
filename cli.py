@@ -107,31 +107,7 @@ def sync(args):
 
 
 def check_hooks(args):
-    #github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
-    #repo = github.getRepository(args.gh_org + '/' + args.gh_repo)
-    #i = jira.getProject('JIR').fetch_issues('ghas-performance-testing/sync-action-test', 1)
-    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    jp = jira.getProject('JIR')
-
-    #print(jp.get_repo_state('wuff-krabuff'))
-    jp.save_repo_state('ghas-performance-testing/newrepository', {'a': 3})
-    return
-
-    #i = i[0]
-    #print(i.key())
-    #i = jira.j.issue(i.key())
-    #id = None
-    #print(i.fields.attachment)
-    #for a in i.fields.attachment:
-    #    print(a)
-    #    print(a.id)
-    #    id = a.id
-    #    print(dir(a))
-    #jira.j.delete_attachment(id)
-    #for a in repo.get_alerts():
-    #    print(json.dumps(a.json, indent=2))
-    #a = repo.get_alert(98)
-    #print(json.dumps(a.json, indent=2))
+    pass
 
 
 def install_hooks(args):

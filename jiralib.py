@@ -98,6 +98,17 @@ class Jira:
 
 
     def attach_file(self, issue_key, fname, fp):
+        '''
+        This function is currently needed, because the version of the 'jira' module
+        we depend on (2.0.0) has a bug that makes file attachments crash for
+        recent versions of python. This has been fixed in version 3.0.0, which,
+        unfortunately is not yet available via pip.
+        See:
+          https://github.com/pycontribs/jira/issues/890
+          https://github.com/pycontribs/jira/issues/985
+
+        TODO: Remove this function once `jira:3.0.0` is available via pip.
+        '''
         resp = requests.post(
             '{api_url}/rest/api/2/issue/{issue_key}/attachments'.format(
                 api_url=self.url,
