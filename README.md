@@ -11,7 +11,6 @@ This repository gives a quick illustrative example of how to integrate GitHub Co
 The easiest way to use this tool is via its GitHub Action, which you can add to your workflows. Here is what you need before you can start:
 
 * A GitHub repository with Code Scanning enabled and a few alerts. Follow [this guide](https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/setting-up-code-scanning-for-a-repository) to set up Code Scanning.
-* A GitHub `personal access token`, so that the action can fetch alerts from your repository. It might be sufficient to use `${{ secrets.GITHUB_TOKEN }}`, which is a token that GitHub automatically generates for your workflows. If not, follow [this guide](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) to obtain a dedicated token. It will have to have at least the `security_events` scope.
 * The URL of your JIRA Server instance.
 * A [JIRA project](https://confluence.atlassian.com/adminjiraserver/creating-a-project-938846813.html) to store your issues. You will need to provide its `project key` to the action.
 * A JIRA Server account (username + password) with the following permissions for the abovementioned project:
@@ -23,7 +22,7 @@ The easiest way to use this tool is via its GitHub Action, which you can add to 
   * `Transition Issues`
 * Depending on where you run your workflow, the JIRA Server instance must be accessible from either the [GitHub.com IP addresses](https://docs.github.com/en/github/authenticating-to-github/about-githubs-ip-addresses) or the address of your GitHub Enterprise Server instance.
 
-Make sure you safely store all credentials as [GitHub Secrets](https://docs.github.com/en/actions/reference/encrypted-secrets). `GITHUB_TOKEN` is a [secret](https://docs.github.com/en/actions/reference/authentication-in-a-workflow#using-the-github_token-in-a-workflow) that is automatically created for you to use in your workflow. Finally, set up the following workflow in your repository, e.g. by adding the file `.github/workflows/jira-sync.yml`:
+Make sure you safely store all credentials as [GitHub Secrets](https://docs.github.com/en/actions/reference/encrypted-secrets). For accessing the Code Scanning alert data, the action uses the [GITHUB_TOKEN](https://docs.github.com/en/actions/reference/authentication-in-a-workflow#using-the-github_token-in-a-workflow) which is automatically created for you, so you don't need to provide it. Finally, set up the following workflow in your repository, e.g. by adding the file `.github/workflows/jira-sync.yml`:
 
 ```yaml
 name: "Sync with JIRA"
@@ -39,7 +38,6 @@ jobs:
       - name: Sync with JIRA
         uses: johnlugton/lgtm-issue-tracker-example@master
         with:
-          github_token: '${{ secrets.GITHUB_TOKEN }}'
           jira_url: '<INSERT JIRA SERVER URL>'
           jira_user: '${{ secrets.JIRA_USER }}'
           jira_token: '${{ secrets.JIRA_TOKEN }}'
@@ -62,9 +60,11 @@ pipenv run ./gh2jira --help
 
 Note: `gh2jira` requires a minimum of `python3.5`.
 
-In addition to the [usual requirements](#using-the-github-action) you also need the URL for the GitHub API, which is:
-* https://api.github.com if your repository is located on GitHub.com
-* https://your-hostname/api/v3/ if your repository is located on a GitHub Server instance
+In addition to the [usual requirements](#using-the-github-action) you also need:
+* the URL for the GitHub API, which is
+  * https://api.github.com if your repository is located on GitHub.com
+  * https://your-hostname/api/v3/ if your repository is located on a GitHub Server instance
+* a GitHub `personal access token`, so that the program can fetch alerts from your repository. Follow [this guide](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) to obtain a dedicated token. It will have to have at least the `security_events` scope.
 
 ```bash
 pipenv run ./gh2jira sync
