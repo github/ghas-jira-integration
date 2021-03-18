@@ -1,12 +1,9 @@
 from jira import JIRA
-import hashlib
 import re
 import util
 import logging
 import requests
 import json
-
-REQUEST_TIMEOUT = 10
 
 # May need to be changed depending on JIRA project type
 CLOSE_TRANSITION = "Done"
@@ -33,6 +30,15 @@ ALERT_NUMBER={alert_num}
 REPOSITORY_KEY={repo_key}
 ALERT_KEY={alert_key}
 """
+
+
+STATE_ISSUE_SUMMARY = '[Code Scanning Issue States]'
+STATE_ISSUE_KEY = util.make_key('gh2jira-state-issue')
+STATE_ISSUE_TEMPLATE="""
+This issue was automatically generated and contains states required for the synchronization between GitHub and JIRA.
+DO NOT MODIFY DESCRIPTION BELOW LINE.
+ISSUE_KEY={issue_key}
+""".format(issue_key=STATE_ISSUE_KEY)
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +97,97 @@ class Jira:
         return resp.json()
 
 
+    def attach_file(self, issue_key, fname, fp):
+        '''
+        This function is currently needed, because the version of the 'jira' module
+        we depend on (2.0.0) has a bug that makes file attachments crash for
+        recent versions of python. This has been fixed in version 3.0.0, which,
+        unfortunately is not yet available via pip.
+        See:
+          https://github.com/pycontribs/jira/issues/890
+          https://github.com/pycontribs/jira/issues/985
+
+        TODO: Remove this function once `jira:3.0.0` is available via pip.
+        '''
+        resp = requests.post(
+            '{api_url}/rest/api/2/issue/{issue_key}/attachments'.format(
+                api_url=self.url,
+                issue_key=issue_key
+            ),
+            headers={'X-Atlassian-Token': 'no-check'},
+            auth=self.auth(),
+            files={'file': (fname, fp)},
+            timeout=util.REQUEST_TIMEOUT
+        )
+        resp.raise_for_status()
+
+
 class JiraProject:
     def __init__(self, jira, projectkey):
         self.jira = jira
         self.projectkey = projectkey
         self.j = self.jira.j
+
+
+    def get_state_issue(self, issue_key='-'):
+        if issue_key != '-':
+            return self.j.issue(issue_key)
+
+        issue_search = 'project={jira_project} and description ~ "{key}"'.format(
+            jira_project=self.projectkey,
+            key=STATE_ISSUE_KEY
+        )
+        issues = list(
+            filter(
+                lambda i: i.fields.summary == STATE_ISSUE_SUMMARY,
+                self.j.search_issues(issue_search, maxResults=0)
+            )
+        )
+
+        if len(issues) == 0:
+            return self.j.create_issue(
+                project=self.projectkey,
+                summary=STATE_ISSUE_SUMMARY,
+                description=STATE_ISSUE_TEMPLATE,
+                issuetype={'name': 'Bug'}
+            )
+        elif len(issues) > 1:
+            issues.sort(key=lambda i: i.id())    # keep the oldest issue
+            for i in issues[1:]:
+                i.delete()
+
+        i = issues[0]
+
+        # When fetching issues via the search_issues() function, we somehow
+        # cannot access the attachments. To do that, we need to fetch the issue
+        # via the issue() function first.
+        return self.j.issue(i.key)
+
+
+    def fetch_repo_state(self, repo_id, issue_key='-'):
+        i = self.get_state_issue(issue_key)
+
+        for a in i.fields.attachment:
+            if a.filename == repo_id_to_fname(repo_id):
+                return util.state_from_json(a.get())
+
+        return {}
+
+
+    def save_repo_state(self, repo_id, state, issue_key='-'):
+        i = self.get_state_issue(issue_key)
+
+        # remove previous state files for the given repo_id
+        for a in i.fields.attachment:
+            if a.filename == repo_id_to_fname(repo_id):
+                self.j.delete_attachment(a.id)
+
+        # attach the new state file
+        self.jira.attach_file(
+            i.key,
+            repo_id_to_fname(repo_id),
+            util.state_to_json(state)
+        )
 
 
     def create_issue(self, repo_id, rule_id, rule_desc, alert_url, alert_num):
@@ -225,7 +317,7 @@ def parse_alert_info(desc):
     m = re.search('ALERT_NUMBER=(.*)$', desc, re.MULTILINE)
     if m is None:
         return failed
-    alert_num = m.group(1)
+    alert_num = int(m.group(1))
     m = re.search('REPOSITORY_KEY=(.*)$', desc, re.MULTILINE)
     if m is None:
         return failed
@@ -245,3 +337,7 @@ def parse_alert_info(desc):
 
 def parse_state(raw_state):
     return raw_state != CLOSED_STATUS
+
+
+def repo_id_to_fname(repo_id):
+    return repo_id.replace('/', '^') + '.json'

@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import util
+from sync import Sync, DIRECTION_G2J, DIRECTION_J2G, DIRECTION_BOTH
 import logging
 import server
 
@@ -23,11 +24,11 @@ def fail(msg):
 
 def direction_str_to_num(dstr):
     if dstr == 'gh2jira':
-        return util.DIRECTION_G2J
+        return DIRECTION_G2J
     elif dstr == 'jira2gh':
-        return util.DIRECTION_J2G
+        return DIRECTION_J2G
     elif dstr == 'both':
-        return util.DIRECTION_BOTH
+        return DIRECTION_BOTH
     else:
         fail('Unknown direction argument "{direction}"!'.format(direction=dstr))
 
@@ -50,12 +51,12 @@ def serve(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    sync = util.Sync(
+    s = Sync(
         github,
         jira.getProject(args.jira_project),
         direction=direction_str_to_num(args.direction)
     )
-    server.run_server(sync, args.secret, port=args.port)
+    server.run_server(s, args.secret, port=args.port)
 
 
 def sync(args):
@@ -79,20 +80,34 @@ def sync(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    util.Sync(
+    jira_project = jira.getProject(args.jira_project)
+    repo_id = args.gh_org + '/' + args.gh_repo
+
+    if args.state_file:
+        if args.state_issue:
+            fail('--state-file and --state-issue are mutually exclusive!')
+
+        state = util.state_from_file(args.state_file)
+    elif args.state_issue:
+        state = jira_project.fetch_repo_state(repo_id, args.state_issue)
+    else:
+        state = {}
+
+    s = Sync(
         github,
-        jira.getProject(args.jira_project),
+        jira_project,
         direction=direction_str_to_num(args.direction)
-    ).sync_repo(args.gh_org + '/' + args.gh_repo)
+    )
+    s.sync_repo(repo_id, states=state)
+
+    if args.state_file:
+        util.state_to_file(args.state_file, state)
+    elif args.state_issue:
+        jira_project.save_repo_state(repo_id, state, args.state_issue)
 
 
 def check_hooks(args):
-    github = ghlib.GitHub(args.gh_url, args.gh_user, args.gh_token)
-    repo = github.getRepository(args.gh_org + '/' + args.gh_repo)
-    #for a in repo.get_alerts():
-    #    print(json.dumps(a.json, indent=2))
-    a = repo.get_alert(98)
-    print(json.dumps(a.json, indent=2))
+    pass
 
 
 def install_hooks(args):
@@ -234,6 +249,19 @@ def main():
         parents=[credential_base, direction_base],
         help='Synchronize GitHub alerts and JIRA tickets for a given repository',
         description='Synchronize GitHub alerts and JIRA tickets for a given repository'
+    )
+    sync_parser.add_argument(
+        '--state-file',
+        help='File holding the current states of all alerts. The program will create the' +
+             ' file if it doesn\'t exist and update it after each run.',
+        default=None
+    )
+    sync_parser.add_argument(
+        '--state-issue',
+        help='The key of the issue holding the current states of all alerts. The program ' +
+             'will create the issue if "-" is given as the argument. The issue will be ' +
+             'updated after each run.',
+        default=None
     )
     sync_parser.set_defaults(func=sync)
 

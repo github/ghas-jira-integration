@@ -1,4 +1,3 @@
-import os
 from flask import Flask, request, jsonify
 from flask.logging import default_handler
 import json
@@ -6,9 +5,7 @@ import hashlib
 import hmac
 import logging
 from datetime import datetime
-import util
 import jiralib
-import ghlib
 import threading
 
 

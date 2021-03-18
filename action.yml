@@ -19,9 +19,9 @@ inputs:
     required: false
     default: ${{ github.token }}
   sync_direction:
-    description: 'Which direction to synchronize in (gh2jira, jira2gh)'
+    description: 'Which direction to synchronize in ("gh2jira", "jira2gh" or "both")'
     required: false
-    default: "gh2jira"
+    default: 'both'
 runs:
   using: 'docker'
   image: 'Dockerfile'

@@ -226,6 +226,10 @@ class GHAlert:
         self.json = json
 
 
+    def number(self):
+        return int(self.json['number'])
+
+
     def get_state(self):
         return parse_alert_state(self.json['state'])
 
@@ -249,7 +253,7 @@ class GHAlert:
         logger.info(
             '{action} alert {alert_num} of repository "{repo_id}".'.format(
                 action=action,
-                alert_num=self.json['number'],
+                alert_num=self.number(),
                 repo_id=self.github_repo.repo_id
             )
         )
@@ -261,7 +265,7 @@ class GHAlert:
             '{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
                 api_url=self.gh.url,
                 repo_id=self.github_repo.repo_id,
-                alert_num=self.json['number']
+                alert_num=self.number()
             ),
             data=data,
             headers=self.gh.default_headers(),

@@ -67,20 +67,37 @@ In addition to the [usual requirements](#using-the-github-action) you also need:
 * a GitHub `personal access token`, so that the program can fetch alerts from your repository. Follow [this guide](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) to obtain a dedicated token. It will have to have at least the `security_events` scope.
 
 ```bash
-pipenv run ./gh2jira sync
-                 --gh-url "<INSERT GITHUB API URL>"
-                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>"
-                 --gh-org "<INSERT REPO ORGANIZATON>"
-                 --gh-repo "<INSERT REPO NAME>"
-                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>"
-                 --jira-user "<INSERT JIRA USER>"
-                 --jira-token "<INSERT JIRA PASSWORD>"
-                 --jira-project "<INSERT JIRA PROJECT KEY>"
+pipenv run ./gh2jira sync \
+                 --gh-url "<INSERT GITHUB API URL>" \
+                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>" \
+                 --gh-org "<INSERT REPO ORGANIZATON>" \
+                 --gh-repo "<INSERT REPO NAME>" \
+                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>" \
+                 --jira-user "<INSERT JIRA USER>" \
+                 --jira-token "<INSERT JIRA PASSWORD>" \
+                 --jira-project "<INSERT JIRA PROJECT KEY>" \
                  --direction gh2jira
 ```
 
-Note: Instead of the `--gh-token` and `--jira-token` options, you may also set the `GH2JIRA_GH_TOKEN` and `GH2JIRA_JIRA_TOKEN` environment variables.
-The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync. Currently, two-way integration is not yet possible via this command. If you need it, use the CLI's `serve` command (see below).
+Note: Instead of the `--gh-token` and `--jira-token` options, you may also set the `GH2JIRA_GH_TOKEN` and `GH2JIRA_JIRA_TOKEN` environment variables. The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync.
+
+Here an example for two-way integration:
+
+```bash
+pipenv run ./gh2jira sync \
+                 --gh-url "<INSERT GITHUB API URL>" \
+                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>" \
+                 --gh-org "<INSERT REPO ORGANIZATON>" \
+                 --gh-repo "<INSERT REPO NAME>" \
+                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>" \
+                 --jira-user "<INSERT JIRA USER>" \
+                 --jira-token "<INSERT JIRA PASSWORD>" \
+                 --jira-project "<INSERT JIRA PROJECT KEY>" \
+                 --state-file myrepository-state.json \
+                 --direction both
+```
+
+In this case the repository's state is stored in a JSON file (which will be created if it doesn't already exist). Alternatively, the state can also be stored in a dedicated JIRA issue via `--state-issue -` (this will automatically generate and update a storage issue within the same JIRA project). If the storage issue should be in a separate JIRA project, you can specify `--state-issue KEY-OF-THE-STORAGE-ISSUE`.
 
 ## Using the CLI's `serve` command
 
@@ -102,15 +119,15 @@ Second, [register a webhook on JIRA](https://developer.atlassian.com/server/jira
 Finally, start the server:
 
 ```bash
-pipenv run ./gh2jira serve
-                 --gh-url "<INSERT GITHUB API URL>"
-                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>"
-                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>"
-                 --jira-user "<INSERT JIRA USER>"
-                 --jira-token "<INSERT JIRA PASSWORD>"
-                 --jira-project "<INSERT JIRA PROJECT KEY>"
-                 --secret "<INSERT WEBHOOK SECRET>"
-                 --port 5000
+pipenv run ./gh2jira serve \
+                 --gh-url "<INSERT GITHUB API URL>" \
+                 --gh-token "<INSERT GITHUB PERSONAL ACCESS TOKEN>" \
+                 --jira-url "<INSERT JIRA SERVER INSTANCE URL>" \
+                 --jira-user "<INSERT JIRA USER>" \
+                 --jira-token "<INSERT JIRA PASSWORD>" \
+                 --jira-project "<INSERT JIRA PROJECT KEY>" \
+                 --secret "<INSERT WEBHOOK SECRET>" \
+                 --port 5000 \
                  --direction both
 ```
 
