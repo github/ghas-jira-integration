@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sync with JIRA
-        uses: johnlugton/lgtm-issue-tracker-example@master
+        uses: github/codescanning-jira-integration@master
         with:
           jira_url: '<INSERT JIRA SERVER URL>'
           jira_user: '${{ secrets.JIRA_USER }}'
