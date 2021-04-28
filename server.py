@@ -107,7 +107,7 @@ def github_webhook():
     alert_url = alert.get("html_url")
     alert_num = alert.get("number")
     rule_id = alert.get("rule").get("id")
-    rule_desc = alert.get("rule").get("id")
+    rule_desc = alert.get("rule").get("description")
 
     # TODO: We might want to do the following asynchronously, as it could
     # take time to do a full sync on a repo with many alerts / issues
