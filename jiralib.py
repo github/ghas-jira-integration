@@ -134,7 +134,7 @@ class JiraProject:
             return self.j.issue(issue_key)
 
         issue_search = 'project={jira_project} and description ~ "{key}"'.format(
-            jira_project=self.projectkey,
+            jira_project='\"{}\"'.format(self.projectkey),
             key=STATE_ISSUE_KEY
         )
         issues = list(
@@ -223,7 +223,7 @@ class JiraProject:
         else:
             key = util.make_alert_key(repo_id, alert_num)
         issue_search = 'project={jira_project} and description ~ "{key}"'.format(
-            jira_project=self.projectkey,
+            jira_project='\"{}\"'.format(self.projectkey),
             key=key
         )
         issues = list(filter(lambda i: i.is_managed(), [JiraIssue(self, raw) for raw in self.j.search_issues(issue_search, maxResults=0)]))
