@@ -6,16 +6,19 @@ REQUEST_TIMEOUT = 10
 
 
 def state_from_json(s):
-    # convert string keys into int keys
-    # this is necessary because JSON doesn't allow
-    # int keys and json.dump() automatically converts
-    # int keys into string keys.
-    return {int(k): v for k, v in json.loads(s).items()}
+    j = json.loads(s)
+    if not "version" in j:
+        return {}
+    return j['states']
 
 
 def state_to_json(state):
+    final = {
+        'version': 2,
+        'states': state
+    }
     return json.dumps(
-        state,
+        final,
         indent=2,
         sort_keys=True
     )
@@ -37,10 +40,6 @@ def make_key(s):
     sha_1 = hashlib.sha1()
     sha_1.update(s.encode('utf-8'))
     return sha_1.hexdigest()
-
-
-def make_alert_key(repo_id, alert_num):
-    return make_key(repo_id + '/' + str(alert_num))
 
 
 def json_accept_header():

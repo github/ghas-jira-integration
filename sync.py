@@ -1,6 +1,7 @@
 import jiralib
 import ghlib
 import logging
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -22,52 +23,58 @@ class Sync:
 
 
     def alert_created(self, repo_id, alert_num):
+        a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
-            self.github.getRepository(repo_id).get_alert(alert_num),
-            self.jira.fetch_issues(repo_id, alert_num),
+            a,
+            self.jira.fetch_issues(a.get_key()),
             DIRECTION_G2J
         )
 
 
     def alert_changed(self, repo_id, alert_num):
+        a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
-            self.github.getRepository(repo_id).get_alert(alert_num),
-            self.jira.fetch_issues(repo_id, alert_num),
+            a,
+            self.jira.fetch_issues(a.get_key()),
             DIRECTION_G2J
         )
 
 
     def alert_fixed(self, repo_id, alert_num):
+        a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
-            self.github.getRepository(repo_id).get_alert(alert_num),
-            self.jira.fetch_issues(repo_id, alert_num),
+            a,
+            self.jira.fetch_issues(a.get_key()),
             DIRECTION_G2J
         )
 
 
     def issue_created(self, desc):
-        repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
+        repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
+        a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
-            self.github.getRepository(repo_id).get_alert(alert_num),
-            self.jira.fetch_issues(repo_id, alert_num),
+            a,
+            self.jira.fetch_issues(a.get_key()),
             DIRECTION_J2G
         )
 
 
     def issue_changed(self, desc):
-        repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
+        repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
+        a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
-            self.github.getRepository(repo_id).get_alert(alert_num),
-            self.jira.fetch_issues(repo_id, alert_num),
+            a,
+            self.jira.fetch_issues(a.get_key()),
             DIRECTION_J2G
         )
 
 
     def issue_deleted(self, desc):
-        repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
+        repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
+        a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
-            self.github.getRepository(repo_id).get_alert(alert_num),
-            self.jira.fetch_issues(repo_id, alert_num),
+            a,
+            self.jira.fetch_issues(a.get_key()),
             DIRECTION_J2G
         )
 
@@ -85,10 +92,13 @@ class Sync:
         if len(issues) == 0:
             newissue = self.jira.create_issue(
                 alert.github_repo.repo_id,
-                alert.json['rule']['id'],
-                alert.json['rule']['description'],
-                alert.json['html_url'],
-                alert.number()
+                alert.short_desc(),
+                alert.long_desc(),
+                alert.hyperlink(),
+                alert.get_type(),
+                alert.number(),
+                alert.github_repo.get_key(),
+                alert.get_key()
             )
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
@@ -108,7 +118,7 @@ class Sync:
         else:
             d = self.direction
 
-        if d & DIRECTION_G2J or alert.is_fixed():
+        if d & DIRECTION_G2J or not alert.can_transition():
             # The user treats GitHub as the source of truth.
             # Also, if the alert to be synchronized is already "fixed"
             # then even if the user treats JIRA as the source of truth,
@@ -127,19 +137,23 @@ class Sync:
             repo_id=repo_id
         ))
 
+        repo = self.github.getRepository(repo_id)
         states = {} if states is None else states
         pairs = {}
 
         # gather alerts
-        for a in self.github.getRepository(repo_id).get_alerts():
-            pairs[a.number()] = (a, [])
+        for a in itertools.chain(
+            repo.get_secrets(),
+            repo.get_alerts()
+        ):
+            pairs[a.get_key()] = (a, [])
 
         # gather issues
-        for i in self.jira.fetch_issues(repo_id):
-            _, anum, _, _ = i.get_alert_info()
-            if not anum in pairs:
-                pairs[anum] = (None, [])
-            pairs[anum][1].append(i)
+        for i in self.jira.fetch_issues(repo.get_key()):
+            _, _, _, alert_key, _ = i.get_alert_info()
+            if not alert_key in pairs:
+                pairs[alert_key] = (None, [])
+            pairs[alert_key][1].append(i)
 
         # remove unused states
         for k in list(states.keys()):
@@ -147,8 +161,8 @@ class Sync:
                 del states[k]
 
         # perform sync
-        for anum, (alert, issues) in pairs.items():
-            past_state = states.get(anum, None)
+        for akey, (alert, issues) in pairs.items():
+            past_state = states.get(akey, None)
             if alert is None or alert.get_state() != past_state:
                 d = DIRECTION_G2J
             else:
@@ -157,6 +171,6 @@ class Sync:
             new_state = self.sync(alert, issues, d)
 
             if new_state is None:
-                states.pop(anum, None)
+                states.pop(akey, None)
             else:
-                states[anum] = new_state
+                states[akey] = new_state

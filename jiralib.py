@@ -15,10 +15,13 @@ UPDATE_EVENT = 'jira:issue_updated'
 CREATE_EVENT = 'jira:issue_created'
 DELETE_EVENT = 'jira:issue_deleted'
 
-TITLE_PREFIX = '[Code Scanning Alert]:'
+TITLE_PREFIXES = {
+    'Alert':  '[Code Scanning Alert]:',
+    'Secret': '[Secret Scanning Alert]:'
+}
 
 DESC_TEMPLATE="""
-{rule_desc}
+{long_desc}
 
 {alert_url}
 
@@ -26,6 +29,7 @@ DESC_TEMPLATE="""
 This issue was automatically generated from a GitHub alert, and will be automatically resolved once the underlying problem is fixed.
 DO NOT MODIFY DESCRIPTION BELOW LINE.
 REPOSITORY_NAME={repo_id}
+ALERT_TYPE={alert_type}
 ALERT_NUMBER={alert_num}
 REPOSITORY_KEY={repo_key}
 ALERT_KEY={alert_key}
@@ -190,26 +194,38 @@ class JiraProject:
         )
 
 
-    def create_issue(self, repo_id, rule_id, rule_desc, alert_url, alert_num):
+    def create_issue(
+        self,
+        repo_id,
+        short_desc,
+        long_desc,
+        alert_url,
+        alert_type,
+        alert_num,
+        repo_key,
+        alert_key
+    ):
         raw = self.j.create_issue(
             project=self.projectkey,
-            summary='{prefix} {rule} in {repo}'.format(
-                prefix=TITLE_PREFIX,
-                rule=rule_id,
+            summary='{prefix} {short_desc} in {repo}'.format(
+                prefix=TITLE_PREFIXES[alert_type],
+                short_desc=short_desc,
                 repo=repo_id
             ),
             description=DESC_TEMPLATE.format(
-                rule_desc=rule_desc,
+                long_desc=long_desc,
                 alert_url=alert_url,
                 repo_id=repo_id,
+                alert_type=alert_type,
                 alert_num=alert_num,
-                repo_key=util.make_key(repo_id),
-                alert_key=util.make_alert_key(repo_id, alert_num)
+                repo_key=repo_key,
+                alert_key=alert_key
             ),
             issuetype={'name': 'Bug'}
         )
-        logger.info('Created issue {issue_key} for alert {alert_num} in {repo_id}.'.format(
+        logger.info('Created issue {issue_key} for {alert_type} {alert_num} in {repo_id}.'.format(
             issue_key=raw.key,
+            alert_type=alert_type,
             alert_num=alert_num,
             repo_id=repo_id
         ))
@@ -217,11 +233,7 @@ class JiraProject:
         return JiraIssue(self, raw)
 
 
-    def fetch_issues(self, repo_id, alert_num=None):
-        if alert_num is None:
-            key = util.make_key(repo_id)
-        else:
-            key = util.make_alert_key(repo_id, alert_num)
+    def fetch_issues(self, key):
         issue_search = 'project={jira_project} and description ~ "{key}"'.format(
             jira_project='\"{}\"'.format(self.projectkey),
             key=key
@@ -314,6 +326,11 @@ def parse_alert_info(desc):
     if m is None:
         return failed
     repo_id = m.group(1)
+    m = re.search('ALERT_TYPE=(.*)$', desc, re.MULTILINE)
+    if m is None:
+        alert_type = None
+    else:
+        alert_type = m.group(1)
     m = re.search('ALERT_NUMBER=(.*)$', desc, re.MULTILINE)
     if m is None:
         return failed
@@ -327,12 +344,7 @@ def parse_alert_info(desc):
         return failed
     alert_key = m.group(1)
 
-    # consistency checks:
-    if repo_key != util.make_key(repo_id) \
-    or alert_key != util.make_alert_key(repo_id, alert_num):
-        return failed
-
-    return repo_id, alert_num, repo_key, alert_key
+    return repo_id, alert_num, repo_key, alert_key, alert_type
 
 
 def parse_state(raw_state):

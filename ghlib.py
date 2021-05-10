@@ -153,7 +153,11 @@ class GHRepository:
         )
 
 
-    def get_alerts(self, state = None):
+    def get_key(self):
+        return util.make_key(self.repo_id)
+
+
+    def alerts_helper(self, api_segment, state=None):
         if state:
             state = '&state=' + state
         else:
@@ -161,9 +165,10 @@ class GHRepository:
 
         try:
             resp = requests.get(
-                '{api_url}/repos/{repo_id}/code-scanning/alerts?per_page={results_per_page}{state}'.format(
+                '{api_url}/repos/{repo_id}/{api_segment}/alerts?per_page={results_per_page}{state}'.format(
                     api_url=self.gh.url,
                     repo_id=self.repo_id,
+                    api_segment=api_segment,
                     state=state,
                     results_per_page=RESULTS_PER_PAGE
                 ),
@@ -175,7 +180,7 @@ class GHRepository:
                 resp.raise_for_status()
 
                 for a in resp.json():
-                    yield GHAlert(self, a)
+                    yield a
 
                 nextpage = resp.links.get('next', {}).get('url', None)
                 if not nextpage:
@@ -197,6 +202,37 @@ class GHRepository:
                 raise
 
 
+    def get_info(self):
+        resp = requests.get(
+            '{api_url}/repos/{repo_id}'.format(
+                api_url=self.gh.url,
+                repo_id=self.repo_id
+            ),
+            headers=self.gh.default_headers(),
+            timeout=util.REQUEST_TIMEOUT
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+    def isprivate(self):
+        return self.get_info()['private']
+
+
+    def get_alerts(self, state=None):
+        for a in self.alerts_helper('code-scanning', state):
+            yield Alert(self, a)
+
+
+    def get_secrets(self, state=None):
+        # secret scanning alerts are only accessible on private repositories, so
+        # we return an empty list on public ones
+        if not self.isprivate():
+            return
+        for a in self.alerts_helper('secret-scanning', state):
+            yield Secret(self, a)
+
+
     def get_alert(self, alert_num):
         resp = requests.get(
             '{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
@@ -209,7 +245,7 @@ class GHRepository:
         )
         try:
             resp.raise_for_status()
-            return GHAlert(self, resp.json())
+            return Alert(self, resp.json())
         except HTTPError as httpe:
             if httpe.response.status_code == 404:
                 # A 404 suggests that the alert doesn't exist
@@ -219,48 +255,76 @@ class GHRepository:
                 raise
 
 
-class GHAlert:
+class AlertBase:
     def __init__(self, github_repo, json):
         self.github_repo =  github_repo
         self.gh = github_repo.gh
         self.json = json
 
+    def get_state(self):
+        return self.json['state'] == 'open'
+
+    def get_type(self):
+        return type(self).__name__
 
     def number(self):
         return int(self.json['number'])
 
+    def short_desc(self):
+        raise NotImplementedError
 
-    def get_state(self):
-        return parse_alert_state(self.json['state'])
+    def long_desc(self):
+        raise NotImplementedError
 
+    def hyperlink(self):
+        return self.json['html_url']
 
-    def adjust_state(self, state):
-        if state:
-            self.update('open')
-        else:
-            self.update('dismissed')
+    def can_transition(self):
+        return True
 
+    def get_key(self):
+        raise NotImplementedError
 
-    def is_fixed(self):
-        return self.json['state'] == 'fixed'
-
-
-    def update(self, alert_state):
-        if self.json['state'] == alert_state:
+    def adjust_state(self, target_state):
+        if self.get_state() == target_state:
             return
 
-        action = 'Reopening' if parse_alert_state(alert_state) else 'Closing'
         logger.info(
-            '{action} alert {alert_num} of repository "{repo_id}".'.format(
-                action=action,
+            '{action} {atype} {alert_num} of repository "{repo_id}".'.format(
+                atype=self.get_type(),
+                action='Reopening' if target_state else 'Closing',
                 alert_num=self.number(),
                 repo_id=self.github_repo.repo_id
             )
         )
+        self.do_adjust_state(target_state)
+
+
+class Alert(AlertBase):
+    def __init__(self, github_repo, json):
+        AlertBase.__init__(self, github_repo, json)
+
+    def can_transition(self):
+        return self.json['state'] != 'fixed'
+
+    def long_desc(self):
+        return self.json['rule']['description']
+
+    def short_desc(self):
+        return self.json['rule']['id']
+
+    def get_key(self):
+        return util.make_key(
+            self.github_repo.repo_id + '/' + str(self.number())
+        )
+
+    def do_adjust_state(self, target_state):
+        state = 'open'
         reason = ''
-        if alert_state == 'dismissed':
+        if not target_state:
+            state = 'dismissed'
             reason = ', "dismissed_reason": "won\'t fix"'
-        data = '{{"state": "{state}"{reason}}}'.format(state=alert_state, reason=reason)
+        data = '{{"state": "{state}"{reason}}}'.format(state=state, reason=reason)
         resp = requests.patch(
             '{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}'.format(
                 api_url=self.gh.url,
@@ -274,5 +338,39 @@ class GHAlert:
         resp.raise_for_status()
 
 
-def parse_alert_state(state_string):
-    return state_string not in ['dismissed', 'fixed']
+class Secret(AlertBase):
+    def __init__(self, github_repo, json):
+        AlertBase.__init__(self, github_repo, json)
+
+    def can_transition(self):
+        return True
+
+    def long_desc(self):
+        return self.json['secret_type']
+
+    def short_desc(self):
+        return self.long_desc()
+
+    def get_key(self):
+        return util.make_key(
+            self.github_repo.repo_id + '/' + self.get_type() + '/' + str(self.number())
+        )
+
+    def do_adjust_state(self, target_state):
+        state = 'open'
+        resolution = ''
+        if not target_state:
+            state = 'resolved'
+            resolution = ', "resolution": "wont_fix"'
+        data = '{{"state": "{state}"{resolution}}}'.format(state=state, resolution=resolution)
+        resp = requests.patch(
+            '{api_url}/repos/{repo_id}/secret-scanning/alerts/{alert_num}'.format(
+                api_url=self.gh.url,
+                repo_id=self.github_repo.repo_id,
+                alert_num=self.number()
+            ),
+            data=data,
+            headers=self.gh.default_headers(),
+            timeout=util.REQUEST_TIMEOUT
+        )
+        resp.raise_for_status()
