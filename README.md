@@ -139,4 +139,4 @@ To be determined.
 
 ## License
 
-To be determined.
+[Apache V2](LICENSE)
