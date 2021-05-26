@@ -135,8 +135,8 @@ This will enable two-way integration between GitHub and JIRA. Note: Instead of t
 
 ## Contributing
 
-To be determined.
+See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-To be determined.
+[Apache V2](LICENSE)
