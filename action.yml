@@ -22,11 +22,11 @@ inputs:
     description: 'Which direction to synchronize in ("gh2jira", "jira2gh" or "both")'
     required: false
     default: 'both'
-  issue-end-state:
+  issue_end_state:
     description: 'Custom end state'
     required: false
     default: 'Done'
-  issue-reopen-state:
+  issue_reopen_state:
     description: 'Custom reopen state'
     required: false
     default: 'To Do'
