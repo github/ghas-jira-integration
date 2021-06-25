@@ -22,6 +22,14 @@ inputs:
     description: 'Which direction to synchronize in ("gh2jira", "jira2gh" or "both")'
     required: false
     default: 'both'
+  issue-end-state:
+    description: 'Custom end state'
+    required: false
+    default: 'Done'
+  issue-reopen-state:
+    description: 'Custom reopen state'
+    required: false
+    default: 'To Do'
 runs:
   using: 'docker'
   image: 'Dockerfile'

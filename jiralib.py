@@ -5,11 +5,6 @@ import logging
 import requests
 import json
 
-# May need to be changed depending on JIRA project type
-CLOSE_TRANSITION = "Done"
-REOPEN_TRANSITION = "To Do"
-CLOSED_STATUS = "Done"
-
 # JIRA Webhook events
 UPDATE_EVENT = 'jira:issue_updated'
 CREATE_EVENT = 'jira:issue_created'
@@ -55,8 +50,8 @@ class Jira:
         return self.user, self.token
 
 
-    def getProject(self, projectkey):
-        return JiraProject(self, projectkey)
+    def getProject(self, projectkey, endstate, reopenstate):
+        return JiraProject(self, projectkey, endstate, reopenstate)
 
 
     def list_hooks(self):
@@ -123,10 +118,12 @@ class Jira:
 
 
 class JiraProject:
-    def __init__(self, jira, projectkey):
+    def __init__(self, jira, projectkey, endstate, reopenstate):
         self.jira = jira
         self.projectkey = projectkey
         self.j = self.jira.j
+        self.endstate = endstate
+        self.reopenstate = reopenstate
 
 
     def get_state_issue(self, issue_key='-'):
@@ -239,6 +236,8 @@ class JiraIssue:
         self.project = project
         self.rawissue = rawissue
         self.j = self.project.j
+        self.endstate = self.project.endstate
+        self.reopenstate = self.project.reopenstate
 
 
     def is_managed(self):
@@ -265,21 +264,23 @@ class JiraIssue:
 
 
     def get_state(self):
-        return parse_state(self.rawissue.fields.status.name)
+        return self.parse_state(self.rawissue.fields.status.name)
 
 
     def adjust_state(self, state):
         if state:
-            self.transition(REOPEN_TRANSITION)
+            self.transition(self.reopenstate)
         else:
-            self.transition(CLOSE_TRANSITION)
+            self.transition(self.endstate)
 
+    def parse_state(self, raw_state):
+        return raw_state != self.endstate
 
     def transition(self, transition):
         old_issue_status = str(self.rawissue.fields.status.name)
 
-        if self.get_state() and transition == REOPEN_TRANSITION or \
-        not self.get_state() and transition == CLOSE_TRANSITION:
+        if self.get_state() and transition == self.reopenstate or \
+        not self.get_state() and transition == self.endstate:
             # nothing to do
             return
 
@@ -294,7 +295,7 @@ class JiraIssue:
 
         self.j.transition_issue(self.rawissue, jira_transitions[transition])
 
-        action = 'Reopening' if transition == REOPEN_TRANSITION else 'Closing'
+        action = 'Reopening' if transition == self.reopenstate else 'Closing'
         logger.info(
             '{action} issue {issue_key}'.format(
                 action=action,
@@ -333,10 +334,6 @@ def parse_alert_info(desc):
         return failed
 
     return repo_id, alert_num, repo_key, alert_key
-
-
-def parse_state(raw_state):
-    return raw_state != CLOSED_STATUS
 
 
 def repo_id_to_fname(repo_id):
