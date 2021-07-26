@@ -10,67 +10,55 @@ DIRECTION_BOTH = 3
 
 
 class Sync:
-    def __init__(
-        self,
-        github,
-        jira_project,
-        direction=DIRECTION_BOTH
-    ):
+    def __init__(self, github, jira_project, direction=DIRECTION_BOTH):
         self.github = github
         self.jira = jira_project
         self.direction = direction
-
 
     def alert_created(self, repo_id, alert_num):
         self.sync(
             self.github.getRepository(repo_id).get_alert(alert_num),
             self.jira.fetch_issues(repo_id, alert_num),
-            DIRECTION_G2J
+            DIRECTION_G2J,
         )
-
 
     def alert_changed(self, repo_id, alert_num):
         self.sync(
             self.github.getRepository(repo_id).get_alert(alert_num),
             self.jira.fetch_issues(repo_id, alert_num),
-            DIRECTION_G2J
+            DIRECTION_G2J,
         )
-
 
     def alert_fixed(self, repo_id, alert_num):
         self.sync(
             self.github.getRepository(repo_id).get_alert(alert_num),
             self.jira.fetch_issues(repo_id, alert_num),
-            DIRECTION_G2J
+            DIRECTION_G2J,
         )
-
 
     def issue_created(self, desc):
         repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
         self.sync(
             self.github.getRepository(repo_id).get_alert(alert_num),
             self.jira.fetch_issues(repo_id, alert_num),
-            DIRECTION_J2G
+            DIRECTION_J2G,
         )
-
 
     def issue_changed(self, desc):
         repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
         self.sync(
             self.github.getRepository(repo_id).get_alert(alert_num),
             self.jira.fetch_issues(repo_id, alert_num),
-            DIRECTION_J2G
+            DIRECTION_J2G,
         )
-
 
     def issue_deleted(self, desc):
         repo_id, alert_num, _, _ = jiralib.parse_alert_info(desc)
         self.sync(
             self.github.getRepository(repo_id).get_alert(alert_num),
             self.jira.fetch_issues(repo_id, alert_num),
-            DIRECTION_J2G
+            DIRECTION_J2G,
         )
-
 
     def sync(self, alert, issues, in_direction):
         if alert is None:
@@ -85,10 +73,10 @@ class Sync:
         if len(issues) == 0:
             newissue = self.jira.create_issue(
                 alert.github_repo.repo_id,
-                alert.json['rule']['id'],
-                alert.json['rule']['description'],
-                alert.json['html_url'],
-                alert.number()
+                alert.json["rule"]["id"],
+                alert.json["rule"]["description"],
+                alert.json["html_url"],
+                alert.number(),
             )
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
@@ -121,11 +109,10 @@ class Sync:
             alert.adjust_state(issue.get_state())
             return issue.get_state()
 
-
     def sync_repo(self, repo_id, states=None):
-        logger.info('Performing full sync on repository {repo_id}...'.format(
-            repo_id=repo_id
-        ))
+        logger.info(
+            "Performing full sync on repository {repo_id}...".format(repo_id=repo_id)
+        )
 
         states = {} if states is None else states
         pairs = {}
