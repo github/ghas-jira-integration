@@ -50,13 +50,12 @@ class Jira:
         self.token = token
         self.j = JIRA(url, basic_auth=(user, token))
 
-
     def auth(self):
         return self.user, self.token
 
 
-    def getProject(self, projectkey):
-        return JiraProject(self, projectkey)
+    def getProject(self, projectkey, label):
+        return JiraProject(self, projectkey, label)
 
 
     def list_hooks(self):
@@ -123,8 +122,12 @@ class Jira:
 
 
 class JiraProject:
-    def __init__(self, jira, projectkey):
+    def __init__(self, jira, projectkey, label):
         self.jira = jira
+        if label:
+            self.label = label.split(',')
+        if not label:
+            self.label = []
         self.projectkey = projectkey
         self.j = self.jira.j
 
@@ -206,7 +209,8 @@ class JiraProject:
                 repo_key=util.make_key(repo_id),
                 alert_key=util.make_alert_key(repo_id, alert_num)
             ),
-            issuetype={'name': 'Bug'}
+            issuetype={'name': 'Bug'},
+            labels=self.label
         )
         logger.info('Created issue {issue_key} for alert {alert_num} in {repo_id}.'.format(
             issue_key=raw.key,

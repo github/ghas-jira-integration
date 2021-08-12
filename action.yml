@@ -14,6 +14,11 @@ inputs:
   jira_project:
     description: 'JIRA project key'
     required: true
+  jira_label:
+    description: 'JIRA bug label(s). Value format "red-team,blue-team,GreenTeam", or "red-team"
+                  This tool will split the values entered by commas. Spaces in the double quotes
+                  will be respected and saved.'
+    required: false
   github_token:
     description: 'GitHub API token with the required permissions'
     required: false

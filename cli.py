@@ -50,7 +50,7 @@ def serve(args):
         fail('No Webhook secret specified!')
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
-    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token, args.jira_label)
     s = Sync(
         github,
         jira.getProject(args.jira_project),
@@ -80,7 +80,7 @@ def sync(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    jira_project = jira.getProject(args.jira_project)
+    jira_project = jira.getProject(args.jira_project, args.jira_label)
     repo_id = args.gh_org + '/' + args.gh_repo
 
     if args.state_file:
@@ -211,6 +211,10 @@ def main():
     credential_base.add_argument(
         '--jira-project',
         help='JIRA project key'
+    )
+    credential_base.add_argument(
+        '--jira-label',
+        help='JIRA bug label(s)'
     )
     credential_base.add_argument(
         '--secret',
