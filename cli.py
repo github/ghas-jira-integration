@@ -50,10 +50,10 @@ def serve(args):
         fail('No Webhook secret specified!')
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
-    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token, args.jira_label)
+    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
     s = Sync(
         github,
-        jira.getProject(args.jira_project),
+        jira.getProject(args.jira_project, args.jira_label),
         direction=direction_str_to_num(args.direction)
     )
     server.run_server(s, args.secret, port=args.port)
