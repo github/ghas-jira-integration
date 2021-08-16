@@ -243,8 +243,12 @@ class JiraIssue:
     def transition(self, transition):
         old_issue_status = str(self.rawissue.fields.status.name)
 
-        if self.get_state() and transition == self.reopenstate or \
-        not self.get_state() and transition == self.endstate:
+        if (
+            self.get_state()
+            and transition == self.reopenstate
+            or not self.get_state()
+            and transition == self.endstate
+        ):
             # nothing to do
             return
 
@@ -263,7 +267,7 @@ class JiraIssue:
 
         self.j.transition_issue(self.rawissue, jira_transitions[transition])
 
-        action = 'Reopening' if transition == self.reopenstate else 'Closing'
+        action = "Reopening" if transition == self.reopenstate else "Closing"
 
         logger.info(
             "{action} issue {issue_key}".format(
