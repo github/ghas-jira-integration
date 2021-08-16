@@ -80,7 +80,7 @@ def sync(args):
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    jira_project = jira.getProject(args.jira_project)
+    jira_project = jira.getProject(args.jira_project, args.issue_end_state, args.issue_reopen_state)
     repo_id = args.gh_org + '/' + args.gh_repo
 
     if args.state_file:
@@ -226,13 +226,25 @@ def main():
         default='both'
     )
 
+    issue_state_base = argparse.ArgumentParser(add_help=False)
+    issue_state_base.add_argument(
+        '--issue-end-state',
+        help='Custom end state (e.g. Closed) Done by default',
+        default='Done'
+    )
+    issue_state_base.add_argument(
+        '--issue-reopen-state',
+        help='Custom reopen state (e.g. In Progress) To Do by default',
+        default='To Do'
+    )
+
     parser = argparse.ArgumentParser(prog='gh2jira')
     subparsers = parser.add_subparsers()
 
     # serve
     serve_parser = subparsers.add_parser(
         'serve',
-        parents=[credential_base, direction_base],
+        parents=[credential_base, direction_base, issue_state_base],
         help='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync',
         description='Spawn a webserver which keeps GitHub alerts and JIRA tickets in sync'
     )
@@ -246,7 +258,7 @@ def main():
     # sync
     sync_parser = subparsers.add_parser(
         'sync',
-        parents=[credential_base, direction_base],
+        parents=[credential_base, direction_base, issue_state_base],
         help='Synchronize GitHub alerts and JIRA tickets for a given repository',
         description='Synchronize GitHub alerts and JIRA tickets for a given repository'
     )
