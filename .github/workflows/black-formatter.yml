@@ -1,6 +1,6 @@
 # On an incoming pull request, use Black to reformat the python code.
 
-name: formatblack
+name: Reformat with Black
 on: [pull_request]
 jobs:
   build:
