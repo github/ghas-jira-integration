@@ -54,7 +54,7 @@ def serve(args):
     s = Sync(
         github,
         jira.getProject(args.jira_project, args.jira_label),
-        direction=direction_str_to_num(args.direction)
+        direction=direction_str_to_num(args.direction),
     )
     server.run_server(s, args.secret, port=args.port)
 
@@ -81,7 +81,10 @@ def sync(args):
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
     jira_project = jira.getProject(
-        args.jira_project, args.issue_end_state, args.issue_reopen_state, args.jira_label
+        args.jira_project,
+        args.issue_end_state,
+        args.issue_reopen_state,
+        args.jira_label,
     )
     repo_id = args.gh_org + "/" + args.gh_repo
 
@@ -197,14 +200,11 @@ def main():
         default=os.getenv("GH2JIRA_JIRA_TOKEN"),
     )
     credential_base.add_argument("--jira-project", help="JIRA project key")
+    credential_base.add_argument("--jira-label", help="JIRA bug label(s)")
     credential_base.add_argument(
-        '--jira-label',
-        help='JIRA bug label(s)'
-    )
-    credential_base.add_argument(
-        '--secret',
-        help='Webhook secret. Alternatively, the GH2JIRA_SECRET may be set.',
-        default=os.getenv('GH2JIRA_SECRET')
+        "--secret",
+        help="Webhook secret. Alternatively, the GH2JIRA_SECRET may be set.",
+        default=os.getenv("GH2JIRA_SECRET"),
     )
 
     direction_base = argparse.ArgumentParser(add_help=False)
