@@ -99,7 +99,7 @@ class JiraProject:
     def __init__(self, jira, projectkey, endstate, reopenstate, label):
         self.jira = jira
         if label:
-            self.label = label.split(',')
+            self.label = label.split(",")
         if not label:
             self.label = []
         self.projectkey = projectkey
@@ -172,7 +172,7 @@ class JiraProject:
                 alert_key=util.make_alert_key(repo_id, alert_num),
             ),
             issuetype={"name": "Bug"},
-            labels=self.label
+            labels=self.label,
         )
         logger.info(
             "Created issue {issue_key} for alert {alert_num} in {repo_id}.".format(
