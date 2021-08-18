@@ -17,25 +17,31 @@ last_repo_syncs = {}
 secret = None
 
 
-def run_server(sync_object, webhook_secret, repository_sync_interval=60 * 60 * 24, port=5000):
+def run_server(
+    sync_object, webhook_secret, repository_sync_interval=60 * 60 * 24, port=5000
+):
     global sync
     sync = sync_object
     global secret
-    secret = webhook_secret.encode('utf-8')
+    secret = webhook_secret.encode("utf-8")
     global repo_sync_interval
     repo_sync_interval = repository_sync_interval
     app.run(port=port)
 
-#logging.getLogger('jiralib').addHandler(default_handler)
-#logging.getLogger('ghlib').addHandler(default_handler)
-#logging.basicConfig(level=logging.INFO)
+
+# logging.getLogger('jiralib').addHandler(default_handler)
+# logging.getLogger('ghlib').addHandler(default_handler)
+# logging.basicConfig(level=logging.INFO)
 
 
 def auth_is_valid(signature, request_body):
     if app.debug:
         return True
     return hmac.compare_digest(
-        signature.encode('utf-8'), ('sha256=' + hmac.new(secret, request_body, hashlib.sha256).hexdigest()).encode('utf-8')
+        signature.encode("utf-8"),
+        ("sha256=" + hmac.new(secret, request_body, hashlib.sha256).hexdigest()).encode(
+            "utf-8"
+        ),
     )
 
 
@@ -43,18 +49,22 @@ def auth_is_valid(signature, request_body):
 def jira_webhook():
     """Handle POST requests coming from JIRA, and pass a translated request to GitHub"""
 
-    if not hmac.compare_digest(request.args.get('secret_token', '').encode('utf-8'), secret):
+    if not hmac.compare_digest(
+        request.args.get("secret_token", "").encode("utf-8"), secret
+    ):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    payload = json.loads(request.data.decode('utf-8'))
-    event = payload['webhookEvent']
-    desc = payload['issue']['fields']['description']
+    payload = json.loads(request.data.decode("utf-8"))
+    event = payload["webhookEvent"]
+    desc = payload["issue"]["fields"]["description"]
     repo_id, alert_id, _, _ = jiralib.parse_alert_info(desc)
 
     app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))
 
     if repo_id is None:
-        app.logger.debug('Ignoring JIRA webhook for issue not related to a code scanning alert.')
+        app.logger.debug(
+            "Ignoring JIRA webhook for issue not related to a code scanning alert."
+        )
         return jsonify({}), 200
 
     with sync_lock:
@@ -66,7 +76,9 @@ def jira_webhook():
         elif event == jiralib.UPDATE_EVENT:
             sync.issue_changed(desc)
         else:
-            app.logger.debug('Ignoring JIRA webhook for event "{event}".'.format(event=event))
+            app.logger.debug(
+                'Ignoring JIRA webhook for event "{event}".'.format(event=event)
+            )
             return jsonify({}), 200
 
     return jsonify({}), 200
@@ -80,9 +92,15 @@ def github_webhook():
     any race conditions.
     """
 
-    app.logger.debug('Received GITHUB webhook for event "{event}"'.format(event=request.headers.get("X-GitHub-Event", "")))
+    app.logger.debug(
+        'Received GITHUB webhook for event "{event}"'.format(
+            event=request.headers.get("X-GitHub-Event", "")
+        )
+    )
 
-    if not auth_is_valid(request.headers.get("X-Hub-Signature-256", "not-provided"), request.data):
+    if not auth_is_valid(
+        request.headers.get("X-Hub-Signature-256", "not-provided"), request.data
+    ):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
     # When creating a webhook, GitHub will send a 'ping' to check whether the
@@ -95,13 +113,31 @@ def github_webhook():
     transition = json_dict.get("action")
 
     if request.headers.get("X-GitHub-Event", "") == "repository":
-        if transition == 'deleted':
+        if transition == "deleted":
             with sync_lock:
                 sync.sync_repo(repo_id)
-        return jsonify({"code": 400, "error": "Wrong event type: " + request.headers.get("X-GitHub-Event", "")}), 400
+        return (
+            jsonify(
+                {
+                    "code": 400,
+                    "error": "Wrong event type: "
+                    + request.headers.get("X-GitHub-Event", ""),
+                }
+            ),
+            400,
+        )
 
     if request.headers.get("X-GitHub-Event", "") != "code_scanning_alert":
-        return jsonify({"code": 400, "error": "Wrong event type: " + request.headers.get("X-GitHub-Event", "")}), 400
+        return (
+            jsonify(
+                {
+                    "code": 400,
+                    "error": "Wrong event type: "
+                    + request.headers.get("X-GitHub-Event", ""),
+                }
+            ),
+            400,
+        )
 
     alert = json_dict.get("alert")
     alert_url = alert.get("html_url")
@@ -118,7 +154,11 @@ def github_webhook():
         with sync_lock:
             sync.sync_repo(repo_id)
 
-    app.logger.debug('Received GITHUB webhook {action} for {alert_url}'.format(action=transition, alert_url=alert_url))
+    app.logger.debug(
+        "Received GITHUB webhook {action} for {alert_url}".format(
+            action=transition, alert_url=alert_url
+        )
+    )
 
     # we deal with each action type individually, showing the expected
     # behaviour and response codes explicitly
@@ -134,7 +174,9 @@ def github_webhook():
         else:
             # when the transition is not recognised, we return a bad request response
             return (
-                jsonify({"code": 400, "error": "unknown transition type - %s" % transition}),
+                jsonify(
+                    {"code": 400, "error": "unknown transition type - %s" % transition}
+                ),
                 400,
             )
 
