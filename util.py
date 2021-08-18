@@ -30,9 +30,9 @@ def state_to_file(fpath, state):
 
 
 def make_key(s):
-    sha_1 = hashlib.sha1()
-    sha_1.update(s.encode("utf-8"))
-    return sha_1.hexdigest()
+    sha_3 = hashlib.sha3_256()
+    sha_3.update(s.encode("utf-8"))
+    return sha_3.hexdigest()
 
 
 def make_alert_key(repo_id, alert_num):
