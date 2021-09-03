@@ -1,6 +1,6 @@
-name: 'Sync Code Scanning and JIRA'
-description: "Let's you manage Code Scanning alerts from JIRA by creating an
-              issue for each alert and keeping the states synced."
+name: 'Sync GitHub Advanced Security and Jira'
+description: "This helps sync GHAS alerts to JIRA by creating an
+              issue for each alert."
 inputs:
   jira_url:
     description: 'URL of the JIRA instance'
