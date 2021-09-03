@@ -14,8 +14,8 @@ inputs:
   jira_project:
     description: 'JIRA project key'
     required: true
-  jira_label:
-    description: 'JIRA bug label(s). (e.g. valid format can be "red-team,blue-team,GreenTeam", or "red-team")
+  jira_labels:
+    description: 'JIRA bug label(s). (e.g. valid format can be "red-team,blue-team,green-team", or "red-team")
                   This tool will split the values entered by commas. Spaces in the double quotes
                   will be respected and saved.'
     required: false
