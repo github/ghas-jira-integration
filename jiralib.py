@@ -50,8 +50,8 @@ class Jira:
     def auth(self):
         return self.user, self.token
 
-    def getProject(self, projectkey, endstate, reopenstate):
-        return JiraProject(self, projectkey, endstate, reopenstate)
+    def getProject(self, projectkey, endstate, reopenstate, labels):
+        return JiraProject(self, projectkey, endstate, reopenstate, labels)
 
     def list_hooks(self):
         resp = requests.get(
@@ -96,8 +96,9 @@ class Jira:
 
 
 class JiraProject:
-    def __init__(self, jira, projectkey, endstate, reopenstate):
+    def __init__(self, jira, projectkey, endstate, reopenstate, labels):
         self.jira = jira
+        self.labels = labels.split(",") if labels else []
         self.projectkey = projectkey
         self.j = self.jira.j
         self.endstate = endstate
@@ -123,6 +124,7 @@ class JiraProject:
                 summary=STATE_ISSUE_SUMMARY,
                 description=STATE_ISSUE_TEMPLATE,
                 issuetype={"name": "Bug"},
+                labels=self.labels,
             )
         elif len(issues) > 1:
             issues.sort(key=lambda i: i.id())  # keep the oldest issue
@@ -168,6 +170,7 @@ class JiraProject:
                 alert_key=util.make_alert_key(repo_id, alert_num),
             ),
             issuetype={"name": "Bug"},
+            labels=self.labels,
         )
         logger.info(
             "Created issue {issue_key} for alert {alert_num} in {repo_id}.".format(
@@ -209,6 +212,7 @@ class JiraIssue:
         self.j = self.project.j
         self.endstate = self.project.endstate
         self.reopenstate = self.project.reopenstate
+        self.labels = self.project.labels
 
     def is_managed(self):
         if parse_alert_info(self.rawissue.fields.description)[0] is None:
@@ -274,6 +278,10 @@ class JiraIssue:
                 action=action, issue_key=self.rawissue.key
             )
         )
+
+    def persist_labels(self, labels):
+        if labels:
+            self.rawissue.update(fields={"labels": self.labels})
 
 
 def parse_alert_info(desc):
