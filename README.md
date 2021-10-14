@@ -54,7 +54,7 @@ This action will push any changes (new alerts, alerts deleted, alert states chan
 Using `gh2jira` means the alerts will sync from GitHub to Jira. If you set `sync_direction` to `jira2gh`, it will synchronize the other way. 
 Currently, two-way integration is not yet possible via the action. If you need it, use the CLI's `serve` command (see below).
 
-#### Other optional features
+#### Other optional features for this Action
 
 ##### Labels
 You can also create labels for the JIRA issues that are created. By using the example yaml below in your workflow, you can use multiple labels, and spaces will be respected. For example, if you add `red-team, blue team`, the labels would be created 'red-team' and 'blue team'. If this input is updated in the workflow, the existing JIRE issues will also be updated with the same labels.
@@ -108,13 +108,18 @@ pipenv run ./gh2jira sync \
 
 Note: Instead of the `--gh-token` and `--jira-token` options, you may also set the `GH2JIRA_GH_TOKEN` and `GH2JIRA_JIRA_TOKEN` environment variables. The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync.
 
-Note: There is an optional parameter you can use for creating labels in your JIRA issues. Example below. As previously mentioned, spaces within the double quotes will be respected and saved.
+#### Other optional features for the CLI
+
+There is an optional parameter you can use for creating labels in your JIRA issues. As previously mentioned, spaces within the double quotes will be respected and saved. Just like the GitHub Actions way, the custom transition states are also optional when using the CLI.
+
 
 ```bash
 --jira-labels "red-team,blue-team,green-team"
+--issue-end-state "Closed"
+--issue-reopen-state "blue-team-reopen"
 ```
 
-Here an example for two-way integration:
+Here's an example for a two-way integration:
 
 ```bash
 pipenv run ./gh2jira sync \
