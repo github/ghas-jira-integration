@@ -47,6 +47,13 @@ jobs:
 
 This action will push any changes (new alerts, alerts deleted, alert states changed) to JIRA, by creating, deleting or changing the state of the corresponding JIRA issues. If you set `sync_direction` to `jira2gh`, it will synchronize the other way. Currently, two-way integration is not yet possible via the action. If you need it, use the CLI's `serve` command (see below).
 
+With this action you are also able to create labels for the JIRA issues that are created. By using the example yaml below in your workflow. You can use multiple labels as it shows, and spaces will be respected. If one was to enter `red-team, blue team` the labels would be created 'red-team' and ' blue team'. If this input is updated in the workflow, the existing JIRE issues will also be updated with the same labels.
+
+```yaml
+with:
+  jira_labels: 'red-team,blue-team,green-team'
+```
+
 ## Using the CLI's `sync` command
 
 ### Installation
@@ -80,6 +87,12 @@ pipenv run ./gh2jira sync \
 ```
 
 Note: Instead of the `--gh-token` and `--jira-token` options, you may also set the `GH2JIRA_GH_TOKEN` and `GH2JIRA_JIRA_TOKEN` environment variables. The above command could be invoked via a cronjob every X minutes, to make sure issues and alerts are kept in sync.
+
+Note: There is an optional parameter you can use for creating labels in your JIRA issues. Example below. As previously mentioned, spaces within the double quotes will be respected and saved.
+
+```bash
+--jira-labels "red-team,blue-team,green-team"
+```
 
 Here an example for two-way integration:
 
