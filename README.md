@@ -1,10 +1,10 @@
-# `gh2jira` - Synchronize GitHub Code Scanning alerts and JIRA issues
+# Synchronize GitHub Code Scanning alerts to JIRA issues
 
-[GitHub's REST API](https://docs.github.com/en/rest) and [webhooks](https://docs.github.com/en/developers/webhooks-and-events/about-webhooks) give customers the option of exporting alerts to any issue tracker, by allowing users to fetch the data via API endpoints and / or by receiving webhook POST requests to a hosted server.
+[GitHub's REST API](https://docs.github.com/en/rest) and [webhooks](https://docs.github.com/en/developers/webhooks-and-events/about-webhooks) give customers the option of exporting alerts to any issue tracker, by allowing users to fetch the data via API endpoints and/or by receiving webhook POST requests to a hosted server.
 
 ## This repository
 
-This repository gives a quick illustrative example of how to integrate GitHub Code Scanning with a third-party issue tracker - in this case JIRA. The code is intended as a proof-of-concept, showing the basic operations necessary to handle incoming requests from GitHub. It is not intended for production use. Please feel free to use this as a starting point for your own integration.
+This repository gives a quick illustrative example of how to integrate GitHub Code Scanning with Jira. The code is intended as a proof-of-concept, showing the basic operations necessary to handle incoming requests from GitHub. Please feel free to use this as a starting point for your own integration.
 
 ## Using the GitHub Action
 
@@ -45,14 +45,34 @@ jobs:
           sync_direction: 'gh2jira'
 ```
 
-This action will push any changes (new alerts, alerts deleted, alert states changed) to JIRA, by creating, deleting or changing the state of the corresponding JIRA issues. If you set `sync_direction` to `jira2gh`, it will synchronize the other way. Currently, two-way integration is not yet possible via the action. If you need it, use the CLI's `serve` command (see below).
+This action will push any changes (new alerts, alerts deleted, alert states changed) to JIRA, by creating, deleting or changing the state of the corresponding JIRA issues. There are two sync directions for the field `sync_direction`:
 
-With this action you are also able to create labels for the JIRA issues that are created. By using the example yaml below in your workflow. You can use multiple labels as it shows, and spaces will be respected. If one was to enter `red-team, blue team` the labels would be created 'red-team' and ' blue team'. If this input is updated in the workflow, the existing JIRE issues will also be updated with the same labels.
+- `gh2jira`
+- `jira2gh`
+
+
+Using `gh2jira` means the alerts will sync from GitHub to Jira. If you set `sync_direction` to `jira2gh`, it will synchronize the other way. 
+Currently, two-way integration is not yet possible via the action. If you need it, use the CLI's `serve` command (see below).
+
+#### Other optional features
+
+##### Labels
+You can also create labels for the JIRA issues that are created. By using the example yaml below in your workflow, you can use multiple labels, and spaces will be respected. For example, if you add `red-team, blue team`, the labels would be created 'red-team' and 'blue team'. If this input is updated in the workflow, the existing JIRE issues will also be updated with the same labels.
 
 ```yaml
 with:
   jira_labels: 'red-team,blue-team,green-team'
 ```
+
+##### Custom transition states (end, reopen)
+You can customize the end and reopen states if your Jira workflows don't use the default close/reopen states.
+
+```yaml
+with:
+  issue_end_state: 'Closed'
+  issue_reopen_state: 'red-team-followup'
+```
+
 
 ## Using the CLI's `sync` command
 
