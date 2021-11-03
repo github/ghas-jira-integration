@@ -11,16 +11,11 @@ DIRECTION_BOTH = 3
 
 
 class Sync:
-    def __init__(
-        self,
-        github,
-        jira_project,
-        direction=DIRECTION_BOTH
-    ):
+    def __init__(self, github, jira_project, direction=DIRECTION_BOTH):
         self.github = github
         self.jira = jira_project
         self.direction = direction
-
+        self.labels = self.jira.labels
 
     def alert_created(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
@@ -30,7 +25,6 @@ class Sync:
             DIRECTION_G2J
         )
 
-
     def alert_changed(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
@@ -39,7 +33,6 @@ class Sync:
             DIRECTION_G2J
         )
 
-
     def alert_fixed(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
         self.sync(
@@ -47,7 +40,6 @@ class Sync:
             self.jira.fetch_issues(a.get_key()),
             DIRECTION_G2J
         )
-
 
     def issue_created(self, desc):
         repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
@@ -58,7 +50,6 @@ class Sync:
             DIRECTION_J2G
         )
 
-
     def issue_changed(self, desc):
         repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
         a = self.github.getRepository(repo_id).get_alert(alert_num)
@@ -68,7 +59,6 @@ class Sync:
             DIRECTION_J2G
         )
 
-
     def issue_deleted(self, desc):
         repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
         a = self.github.getRepository(repo_id).get_alert(alert_num)
@@ -77,7 +67,6 @@ class Sync:
             self.jira.fetch_issues(a.get_key()),
             DIRECTION_J2G
         )
-
 
     def sync(self, alert, issues, in_direction):
         if alert is None:
@@ -125,17 +114,18 @@ class Sync:
             # we have to push back the state to JIRA, because "fixed"
             # alerts cannot be transitioned to "open"
             issue.adjust_state(alert.get_state())
+            issue.persist_labels(self.labels)
             return alert.get_state()
         else:
             # The user treats JIRA as the source of truth
             alert.adjust_state(issue.get_state())
+            issue.persist_labels(self.labels)
             return issue.get_state()
 
-
     def sync_repo(self, repo_id, states=None):
-        logger.info('Performing full sync on repository {repo_id}...'.format(
-            repo_id=repo_id
-        ))
+        logger.info(
+            "Performing full sync on repository {repo_id}...".format(repo_id=repo_id)
+        )
 
         repo = self.github.getRepository(repo_id)
         states = {} if states is None else states

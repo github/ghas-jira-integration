@@ -1,6 +1,6 @@
-name: 'Sync Code Scanning and JIRA'
-description: "Let's you manage Code Scanning alerts from JIRA by creating an
-              issue for each alert and keeping the states synced."
+name: 'Sync GitHub Advanced Security and Jira'
+description: "This helps sync GHAS alerts to JIRA by creating an
+              issue for each alert."
 inputs:
   jira_url:
     description: 'URL of the JIRA instance'
@@ -14,6 +14,11 @@ inputs:
   jira_project:
     description: 'JIRA project key'
     required: true
+  jira_labels:
+    description: 'JIRA bug label(s). (e.g. valid format can be "red-team,blue-team,green-team", or "red-team")
+                  This tool will split the values entered by commas. Spaces in the double quotes
+                  will be respected and saved.'
+    required: false
   github_token:
     description: 'GitHub API token with the required permissions'
     required: false
@@ -22,6 +27,14 @@ inputs:
     description: 'Which direction to synchronize in ("gh2jira", "jira2gh" or "both")'
     required: false
     default: 'both'
+  issue_end_state:
+    description: 'Custom end state'
+    required: false
+    default: 'Done'
+  issue_reopen_state:
+    description: 'Custom reopen state'
+    required: false
+    default: 'To Do'
 runs:
   using: 'docker'
   image: 'Dockerfile'

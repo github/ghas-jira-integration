@@ -26,21 +26,21 @@ def state_to_json(state):
 
 def state_from_file(fpath):
     if os.path.isfile(fpath):
-        with open(fpath, 'r') as f:
+        with open(fpath, "r") as f:
             return state_from_json(f.read())
     return {}
 
 
 def state_to_file(fpath, state):
-    with open(fpath, 'w') as f:
+    with open(fpath, "w") as f:
         f.write(state_to_json(state))
 
 
 def make_key(s):
-    sha_1 = hashlib.sha1()
-    sha_1.update(s.encode('utf-8'))
-    return sha_1.hexdigest()
+    sha_3 = hashlib.sha3_256()
+    sha_3.update(s.encode("utf-8"))
+    return sha_3.hexdigest()
 
 
 def json_accept_header():
-    return {'Accept': 'application/vnd.github.v3+json'}
+    return {"Accept": "application/vnd.github.v3+json"}
