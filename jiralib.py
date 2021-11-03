@@ -12,11 +12,11 @@ DELETE_EVENT = "jira:issue_deleted"
 
 
 TITLE_PREFIXES = {
-    'Alert':  '[Code Scanning Alert]:',
-    'Secret': '[Secret Scanning Alert]:'
+    "Alert": "[Code Scanning Alert]:",
+    "Secret": "[Secret Scanning Alert]:",
 }
 
-DESC_TEMPLATE="""
+DESC_TEMPLATE = """
 {long_desc}
 
 {alert_url}
@@ -162,11 +162,8 @@ class JiraProject:
 
         # attach the new state file
         self.jira.attach_file(
-            i.key,
-            repo_id_to_fname(repo_id),
-            util.state_to_json(state)
+            i.key, repo_id_to_fname(repo_id), util.state_to_json(state)
         )
-
 
     def create_issue(
         self,
@@ -177,14 +174,12 @@ class JiraProject:
         alert_type,
         alert_num,
         repo_key,
-        alert_key
+        alert_key,
     ):
         raw = self.j.create_issue(
             project=self.projectkey,
-            summary='{prefix} {short_desc} in {repo}'.format(
-                prefix=TITLE_PREFIXES[alert_type],
-                short_desc=short_desc,
-                repo=repo_id
+            summary="{prefix} {short_desc} in {repo}".format(
+                prefix=TITLE_PREFIXES[alert_type], short_desc=short_desc, repo=repo_id
             ),
             description=DESC_TEMPLATE.format(
                 long_desc=long_desc,
@@ -193,7 +188,7 @@ class JiraProject:
                 alert_type=alert_type,
                 alert_num=alert_num,
                 repo_key=repo_key,
-                alert_key=alert_key
+                alert_key=alert_key,
             ),
             issuetype={"name": "Bug"},
             labels=self.labels,
@@ -203,15 +198,16 @@ class JiraProject:
                 issue_key=raw.key, alert_num=alert_num, repo_id=repo_id
             )
         )
-        logger.info('Created issue {issue_key} for {alert_type} {alert_num} in {repo_id}.'.format(
-            issue_key=raw.key,
-            alert_type=alert_type,
-            alert_num=alert_num,
-            repo_id=repo_id
-        ))
+        logger.info(
+            "Created issue {issue_key} for {alert_type} {alert_num} in {repo_id}.".format(
+                issue_key=raw.key,
+                alert_type=alert_type,
+                alert_num=alert_num,
+                repo_id=repo_id,
+            )
+        )
 
         return JiraIssue(self, raw)
-
 
     def fetch_issues(self, key):
         issue_search = 'project={jira_project} and description ~ "{key}"'.format(
@@ -325,12 +321,12 @@ def parse_alert_info(desc):
         return failed
     repo_id = m.group(1)
 
-    m = re.search('ALERT_TYPE=(.*)$', desc, re.MULTILINE)
+    m = re.search("ALERT_TYPE=(.*)$", desc, re.MULTILINE)
     if m is None:
         alert_type = None
     else:
         alert_type = m.group(1)
-    m = re.search('ALERT_NUMBER=(.*)$', desc, re.MULTILINE)
+    m = re.search("ALERT_NUMBER=(.*)$", desc, re.MULTILINE)
 
     if m is None:
         return failed

@@ -19,54 +19,30 @@ class Sync:
 
     def alert_created(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
-        self.sync(
-            a,
-            self.jira.fetch_issues(a.get_key()),
-            DIRECTION_G2J
-        )
+        self.sync(a, self.jira.fetch_issues(a.get_key()), DIRECTION_G2J)
 
     def alert_changed(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
-        self.sync(
-            a,
-            self.jira.fetch_issues(a.get_key()),
-            DIRECTION_G2J
-        )
+        self.sync(a, self.jira.fetch_issues(a.get_key()), DIRECTION_G2J)
 
     def alert_fixed(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
-        self.sync(
-            a,
-            self.jira.fetch_issues(a.get_key()),
-            DIRECTION_G2J
-        )
+        self.sync(a, self.jira.fetch_issues(a.get_key()), DIRECTION_G2J)
 
     def issue_created(self, desc):
         repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
         a = self.github.getRepository(repo_id).get_alert(alert_num)
-        self.sync(
-            a,
-            self.jira.fetch_issues(a.get_key()),
-            DIRECTION_J2G
-        )
+        self.sync(a, self.jira.fetch_issues(a.get_key()), DIRECTION_J2G)
 
     def issue_changed(self, desc):
         repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
         a = self.github.getRepository(repo_id).get_alert(alert_num)
-        self.sync(
-            a,
-            self.jira.fetch_issues(a.get_key()),
-            DIRECTION_J2G
-        )
+        self.sync(a, self.jira.fetch_issues(a.get_key()), DIRECTION_J2G)
 
     def issue_deleted(self, desc):
         repo_id, alert_num, _, _, _ = jiralib.parse_alert_info(desc)
         a = self.github.getRepository(repo_id).get_alert(alert_num)
-        self.sync(
-            a,
-            self.jira.fetch_issues(a.get_key()),
-            DIRECTION_J2G
-        )
+        self.sync(a, self.jira.fetch_issues(a.get_key()), DIRECTION_J2G)
 
     def sync(self, alert, issues, in_direction):
         if alert is None:
@@ -87,7 +63,7 @@ class Sync:
                 alert.get_type(),
                 alert.number(),
                 alert.github_repo.get_key(),
-                alert.get_key()
+                alert.get_key(),
             )
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
@@ -132,10 +108,7 @@ class Sync:
         pairs = {}
 
         # gather alerts
-        for a in itertools.chain(
-            repo.get_secrets(),
-            repo.get_alerts()
-        ):
+        for a in itertools.chain(repo.get_secrets(), repo.get_alerts()):
             pairs[a.get_key()] = (a, [])
 
         # gather issues

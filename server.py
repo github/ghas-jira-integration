@@ -54,9 +54,9 @@ def jira_webhook():
     ):
         return jsonify({"code": 403, "error": "Unauthorized"}), 403
 
-    payload = json.loads(request.data.decode('utf-8'))
-    event = payload['webhookEvent']
-    desc = payload['issue']['fields']['description']
+    payload = json.loads(request.data.decode("utf-8"))
+    event = payload["webhookEvent"]
+    desc = payload["issue"]["fields"]["description"]
     repo_id, _, _, _, _ = jiralib.parse_alert_info(desc)
 
     app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))

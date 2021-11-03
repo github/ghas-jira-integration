@@ -9,19 +9,12 @@ def state_from_json(s):
     j = json.loads(s)
     if not "version" in j:
         return {}
-    return j['states']
+    return j["states"]
 
 
 def state_to_json(state):
-    final = {
-        'version': 2,
-        'states': state
-    }
-    return json.dumps(
-        final,
-        indent=2,
-        sort_keys=True
-    )
+    final = {"version": 2, "states": state}
+    return json.dumps(final, indent=2, sort_keys=True)
 
 
 def state_from_file(fpath):
