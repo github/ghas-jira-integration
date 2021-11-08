@@ -40,4 +40,6 @@ runs:
   steps:
   - name: Run GitHub to Jira Sync
     shell: bash
-    run: ${{ github.action_path }}/run-gh2jira.sh
+    run: |
+      chmod +x ${{ github.action_path }}/run-gh2jira.sh
+      ${{ github.action_path }}/run-gh2jira.sh
