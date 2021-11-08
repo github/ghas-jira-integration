@@ -1,5 +1,5 @@
 #!/bin/sh
-pip install jira
+pip3 install Pipfile
 REPOSITORY_NAME="$(echo "$GITHUB_REPOSITORY" | cut -d/ -f 2)"
 ./gh2jira sync \
   --gh-url "$GITHUB_API_URL" \
