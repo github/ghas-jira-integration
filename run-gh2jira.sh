@@ -1,6 +1,5 @@
 #!/bin/sh
-pip3 install pipenv
-pipenv install
+pip3 install -r requirements.txt
 REPOSITORY_NAME="$(echo "$GITHUB_REPOSITORY" | cut -d/ -f 2)"
 ./gh2jira sync \
   --gh-url "$GITHUB_API_URL" \
