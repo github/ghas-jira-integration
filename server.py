@@ -57,7 +57,7 @@ def jira_webhook():
     payload = json.loads(request.data.decode("utf-8"))
     event = payload["webhookEvent"]
     desc = payload["issue"]["fields"]["description"]
-    repo_id, alert_id, _, _ = jiralib.parse_alert_info(desc)
+    repo_id, _, _, _, _ = jiralib.parse_alert_info(desc)
 
     app.logger.debug('Received JIRA webhook for event "{event}"'.format(event=event))
 
@@ -143,7 +143,7 @@ def github_webhook():
     alert_url = alert.get("html_url")
     alert_num = alert.get("number")
     rule_id = alert.get("rule").get("id")
-    rule_desc = alert.get("rule").get("id")
+    rule_desc = alert.get("rule").get("description")
 
     # TODO: We might want to do the following asynchronously, as it could
     # take time to do a full sync on a repo with many alerts / issues
