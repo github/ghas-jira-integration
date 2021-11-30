@@ -8,11 +8,13 @@ import util
 from sync import Sync, DIRECTION_G2J, DIRECTION_J2G, DIRECTION_BOTH
 import logging
 import server
+import anticrlf
 
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(anticrlf.LogFormatter("%(levelname)s:%(name)s:%(message)s"))
 handler.setLevel(logging.DEBUG)
 root.addHandler(handler)
 
