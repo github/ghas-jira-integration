@@ -54,6 +54,19 @@ This action will push any changes (new alerts, alerts deleted, alert states chan
 Using `gh2jira` means the alerts will sync from GitHub to Jira. If you set `sync_direction` to `jira2gh`, it will synchronize the other way. 
 Currently, two-way integration is not yet possible via the action. If you need it, use the CLI's `serve` command (see below).
 
+
+#### Using this Action to synchronize secret scanning alerts
+Secret scanning alerts can only be queried with the API in private repositories. For public repositories, there will just be an empty results list. You'll need to pass in a PAT via `github_token` that has admin rights to access secret scanning alerts:
+```
+        with:
+          jira_url: '<INSERT JIRA SERVER URL>'
+          jira_user: '${{ secrets.JIRA_USER }}'
+          jira_token: '${{ secrets.JIRA_TOKEN }}'
+          jira_project: '<INSERT JIRA PROJECT KEY>'
+          github_token: '${{ secrets.PERSONAL_ACCESS_TOKEN }}'
+          sync_direction: 'gh2jira'
+ ```     
+
 #### Other optional features for this Action
 
 ##### Labels
