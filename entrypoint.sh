@@ -5,6 +5,7 @@ cd / && pipenv run /gh2jira sync \
                             --gh-token "$INPUT_GITHUB_TOKEN" \
                             --gh-org "$GITHUB_REPOSITORY_OWNER" \
                             --gh-repo "$REPOSITORY_NAME" \
+                            --jira-issue-type "$INPUT_JIRA_ISSUE_TYPE" \
                             --jira-url "$INPUT_JIRA_URL" \
                             --jira-user "$INPUT_JIRA_USER" \
                             --jira-token "$INPUT_JIRA_TOKEN" \

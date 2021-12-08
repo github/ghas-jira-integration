@@ -2,6 +2,10 @@ name: 'Sync GitHub Advanced Security and Jira'
 description: "This helps sync GHAS alerts to JIRA by creating an
               issue for each alert."
 inputs:
+  jira_issue_type:
+    description: 'The Jira ticket(s) issue type.'
+    required: true
+    default: "Bug"
   jira_url:
     description: 'URL of the JIRA instance'
     required: true
@@ -49,6 +53,7 @@ runs:
         --gh-token "${{ inputs.github_token }}" \
         --gh-org "$GITHUB_REPOSITORY_OWNER" \
         --gh-repo "$REPOSITORY_NAME" \
+        --jira-issue-type "${{ inputs.jira_issue_type }}" \
         --jira-url "${{ inputs.jira_url }}" \
         --jira-user "${{ inputs.jira_user }}" \
         --jira-token "${{ inputs.jira_token }}" \

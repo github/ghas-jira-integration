@@ -55,7 +55,7 @@ def serve(args):
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
     s = Sync(
         github,
-        jira.getProject(args.jira_project, args.jira_labels),
+        jira.getProject(args.jira_project, args.jira_labels, args.jira_issue_type),
         direction=direction_str_to_num(args.direction),
     )
     server.run_server(s, args.secret, port=args.port)
@@ -83,6 +83,7 @@ def sync(args):
     github = ghlib.GitHub(args.gh_url, args.gh_token)
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
     jira_project = jira.getProject(
+        args.jira_issue_type,
         args.jira_project,
         args.issue_end_state,
         args.issue_reopen_state,
@@ -193,6 +194,9 @@ def main():
         "--gh-token",
         help="GitHub API token. Alternatively, the GH2JIRA_GH_TOKEN may be set.",
         default=os.getenv("GH2JIRA_GH_TOKEN"),
+    )
+    credential_base.add_argument(
+        "--jira-issue-type", help="The Jira ticket(s) issue type."
     )
     credential_base.add_argument("--jira-url", help="URL of JIRA instance")
     credential_base.add_argument("--jira-user", help="JIRA user name")
