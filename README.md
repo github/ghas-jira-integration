@@ -56,7 +56,7 @@ Currently, two-way integration is not yet possible via the action. If you need i
 
 
 #### Using this Action to synchronize secret scanning alerts
-Secret scanning alerts can only be queried with the API in private repositories. For public repositories, there will just be an empty results list. You'll need to pass in a PAT via `github_token` that has admin rights to access secret scanning alerts:
+Secret scanning alerts can only be queried with the API in private repositories. For public repositories, there will just be an empty results list. You'll need to pass in a PAT via `github_token` that has admin rights to access secret scanning alerts. Ensure the PAT has the `security_events` scope:
 ```
         with:
           jira_url: '<INSERT JIRA SERVER URL>'
@@ -104,7 +104,7 @@ In addition to the [usual requirements](#using-the-github-action) you also need:
 * the URL for the GitHub API, which is
   * https://api.github.com if your repository is located on GitHub.com
   * https://your-hostname/api/v3/ if your repository is located on a GitHub Server instance
-* a GitHub `personal access token`, so that the program can fetch alerts from your repository. Follow [this guide](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) to obtain a dedicated token. It will have to have at least the `security_events` scope.
+* a GitHub `personal access token`, so that the program can fetch alerts from your repository. Follow [this guide](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) to obtain a dedicated token. It will have to have at least the `security_events` scope and muist have admin rights to access secret scanning alerts.
 
 ```bash
 pipenv run ./gh2jira sync \
