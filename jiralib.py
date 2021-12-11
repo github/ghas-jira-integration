@@ -270,7 +270,6 @@ class JiraIssue:
         return raw_state != self.endstate
 
     def transition(self, transition):
-        old_issue_status = str(self.rawissue.fields.status.name)
 
         if (
             self.get_state()
