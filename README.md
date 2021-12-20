@@ -1,4 +1,4 @@
-# Synchronize GitHub Code Scanning alerts to Jira issues
+# Synchronize GitHub Code Scanning and Secret Scanning alerts to Jira issues
 
 [GitHub's REST API](https://docs.github.com/en/rest) and [webhooks](https://docs.github.com/en/developers/webhooks-and-events/about-webhooks) give customers the option of exporting alerts to any issue tracker, by allowing users to fetch the data via API endpoints and/or by receiving webhook POST requests to a hosted server.
 
