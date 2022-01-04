@@ -104,8 +104,8 @@ class JiraProject:
     def __init__(self, endstate, issuetype, jira, labels, projectkey, reopenstate):
         self.endstate = endstate
         self.issuetype = issuetype
-        self.j = self.jira.j
         self.jira = jira
+        self.j = self.jira.j
         self.labels = labels.split(",") if labels else []
         self.projectkey = projectkey
         self.reopenstate = reopenstate
