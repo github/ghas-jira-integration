@@ -1,5 +1,4 @@
 import jiralib
-import ghlib
 import logging
 import itertools
 
@@ -114,13 +113,13 @@ class Sync:
         # gather issues
         for i in self.jira.fetch_issues(repo.get_key()):
             _, _, _, alert_key, _ = i.get_alert_info()
-            if not alert_key in pairs:
+            if alert_key not in pairs:
                 pairs[alert_key] = (None, [])
             pairs[alert_key][1].append(i)
 
         # remove unused states
         for k in list(states.keys()):
-            if not k in pairs:
+            if k not in pairs:
                 del states[k]
 
         # perform sync

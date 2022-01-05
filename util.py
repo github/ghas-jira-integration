@@ -7,7 +7,7 @@ REQUEST_TIMEOUT = 10
 
 def state_from_json(s):
     j = json.loads(s)
-    if not "version" in j:
+    if "version" not in j:
         return {}
     return j["states"]
 

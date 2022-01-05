@@ -1,9 +1,7 @@
 from flask import Flask, request, jsonify
-from flask.logging import default_handler
 import json
 import hashlib
 import hmac
-import logging
 from datetime import datetime
 import jiralib
 import threading
@@ -27,11 +25,6 @@ def run_server(
     global repo_sync_interval
     repo_sync_interval = repository_sync_interval
     app.run(port=port)
-
-
-# logging.getLogger('jiralib').addHandler(default_handler)
-# logging.getLogger('ghlib').addHandler(default_handler)
-# logging.basicConfig(level=logging.INFO)
 
 
 def auth_is_valid(signature, request_body):
@@ -142,8 +135,6 @@ def github_webhook():
     alert = json_dict.get("alert")
     alert_url = alert.get("html_url")
     alert_num = alert.get("number")
-    rule_id = alert.get("rule").get("id")
-    rule_desc = alert.get("rule").get("description")
 
     # TODO: We might want to do the following asynchronously, as it could
     # take time to do a full sync on a repo with many alerts / issues
