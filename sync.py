@@ -92,7 +92,7 @@ class Sync:
             # alerts cannot be transitioned to "open"
             issue.adjust_state(alert.get_state())
             issue.persist_labels(self.labels)
-            issue.perist_issue_type(self.issuetype)
+            issue.persist_issue_type(self.issuetype)
             return alert.get_state()
         else:
             # The user treats JIRA as the source of truth
