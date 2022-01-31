@@ -4,6 +4,7 @@ import util
 import logging
 import requests
 import json
+from io import StringIO
 
 # JIRA Webhook events
 UPDATE_EVENT = "jira:issue_updated"
@@ -161,8 +162,12 @@ class JiraProject:
                 self.j.delete_attachment(a.id)
 
         # attach the new state file
-        self.jira.attach_file(
-            i.key, repo_id_to_fname(repo_id), util.state_to_json(state)
+        attachment = StringIO()
+        attachment.write(util.state_to_json(state))
+        self.j.add_attachment(
+          issue=i.key,
+          attachment=attachment,
+          filename=repo_id_to_fname(repo_id)
         )
 
     def create_issue(
