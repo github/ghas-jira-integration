@@ -56,4 +56,5 @@ runs:
         --jira-labels "${{ inputs.jira_labels }}" \
         --direction "${{ inputs.sync_direction }}" \
         --issue-end-state "${{ inputs.issue_end_state }}" \
-        --issue-reopen-state "${{ inputs.issue_reopen_state }}"
+        --issue-reopen-state "${{ inputs.issue_reopen_state }}" \
+        --state-issue -
