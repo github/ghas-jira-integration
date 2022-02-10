@@ -116,3 +116,6 @@ dmypy.json
 
 # for this POC we do not check-in the pipenv `lock` file
 Pipfile.lock
+
+# ignore vscode devcontainers
+.devcontainer

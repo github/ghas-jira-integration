@@ -55,8 +55,8 @@ class Jira:
     def auth(self):
         return self.user, self.token
 
-    def getProject(self, projectkey, endstate, reopenstate, labels):
-        return JiraProject(self, projectkey, endstate, reopenstate, labels)
+    def getProject(self, projectkey, endstate, reopenstate, labels, issuetype):
+        return JiraProject(self, projectkey, endstate, reopenstate, labels, issuetype)
 
     def list_hooks(self):
         resp = requests.get(
@@ -101,12 +101,13 @@ class Jira:
 
 
 class JiraProject:
-    def __init__(self, jira, projectkey, endstate, reopenstate, labels):
+    def __init__(self, endstate, issuetype, jira, labels, projectkey, reopenstate):
+        self.endstate = endstate
+        self.issuetype = issuetype
         self.jira = jira
+        self.j = self.jira.j
         self.labels = labels.split(",") if labels else []
         self.projectkey = projectkey
-        self.j = self.jira.j
-        self.endstate = endstate
         self.reopenstate = reopenstate
 
     def get_state_issue(self, issue_key="-"):
@@ -128,7 +129,7 @@ class JiraProject:
                 project=self.projectkey,
                 summary=STATE_ISSUE_SUMMARY,
                 description=STATE_ISSUE_TEMPLATE,
-                issuetype={"name": "Bug"},
+                issuetype={"name": self.issuetype},
                 labels=self.labels,
             )
         elif len(issues) > 1:
@@ -190,7 +191,7 @@ class JiraProject:
                 repo_key=repo_key,
                 alert_key=alert_key,
             ),
-            issuetype={"name": "Bug"},
+            issuetype={"name": self.issuetype},
             labels=self.labels,
         )
         logger.info(
@@ -237,6 +238,7 @@ class JiraIssue:
         self.j = self.project.j
         self.endstate = self.project.endstate
         self.reopenstate = self.project.reopenstate
+        self.issuetype = self.project.issuetype
         self.labels = self.project.labels
 
     def is_managed(self):
@@ -306,6 +308,9 @@ class JiraIssue:
     def persist_labels(self, labels):
         if labels:
             self.rawissue.update(fields={"labels": self.labels})
+
+    def persist_issue_type(self):
+        self.rawissue.update(fields={"issuetype": self.issuetype})
 
 
 def parse_alert_info(desc):

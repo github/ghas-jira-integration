@@ -15,6 +15,7 @@ class Sync:
         self.jira = jira_project
         self.direction = direction
         self.labels = self.jira.labels
+        self.issuetype = self.jira.issuetype
 
     def alert_created(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
@@ -90,11 +91,13 @@ class Sync:
             # alerts cannot be transitioned to "open"
             issue.adjust_state(alert.get_state())
             issue.persist_labels(self.labels)
+            issue.persist_issue_type(self.issuetype)
             return alert.get_state()
         else:
             # The user treats JIRA as the source of truth
             alert.adjust_state(issue.get_state())
             issue.persist_labels(self.labels)
+            issue.persist_issue_type(self.issuetype)
             return issue.get_state()
 
     def sync_repo(self, repo_id, states=None):
