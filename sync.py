@@ -14,7 +14,6 @@ class Sync:
         self.github = github
         self.jira = jira_project
         self.direction = direction
-        self.labels = self.jira.labels
 
     def alert_created(self, repo_id, alert_num):
         a = self.github.getRepository(repo_id).get_alert(alert_num)
@@ -89,12 +88,10 @@ class Sync:
             # we have to push back the state to JIRA, because "fixed"
             # alerts cannot be transitioned to "open"
             issue.adjust_state(alert.get_state())
-            issue.persist_labels(self.labels)
             return alert.get_state()
         else:
             # The user treats JIRA as the source of truth
             alert.adjust_state(issue.get_state())
-            issue.persist_labels(self.labels)
             return issue.get_state()
 
     def sync_repo(self, repo_id, states=None):

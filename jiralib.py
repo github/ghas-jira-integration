@@ -124,13 +124,15 @@ class JiraProject:
         )
 
         if len(issues) == 0:
-            return self.j.create_issue(
-                project=self.projectkey,
-                summary=STATE_ISSUE_SUMMARY,
-                description=STATE_ISSUE_TEMPLATE,
-                issuetype={"name": "Bug"},
-                labels=self.labels,
-            )
+            create_kwargs = {
+                "project": self.projectkey,
+                "summary": STATE_ISSUE_SUMMARY,
+                "description": STATE_ISSUE_TEMPLATE,
+                "issuetype": {"name": "Bug"}
+            }
+            if self.labels:
+              create_kwargs["labels"] = self.labels
+            return self.j.create_issue(**create_kwargs)
         elif len(issues) > 1:
             issues.sort(key=lambda i: i.id())  # keep the oldest issue
             for i in issues[1:]:
@@ -176,12 +178,12 @@ class JiraProject:
         repo_key,
         alert_key,
     ):
-        raw = self.j.create_issue(
-            project=self.projectkey,
-            summary="{prefix} {short_desc} in {repo}".format(
+        create_kwargs = {
+            "project": self.projectkey,
+            "summary": "{prefix} {short_desc} in {repo}".format(
                 prefix=TITLE_PREFIXES[alert_type], short_desc=short_desc, repo=repo_id
             ),
-            description=DESC_TEMPLATE.format(
+            "description": DESC_TEMPLATE.format(
                 long_desc=long_desc,
                 alert_url=alert_url,
                 repo_id=repo_id,
@@ -190,9 +192,11 @@ class JiraProject:
                 repo_key=repo_key,
                 alert_key=alert_key,
             ),
-            issuetype={"name": "Bug"},
-            labels=self.labels,
-        )
+            "issuetype": {"name": "Bug"}
+        }
+        if self.labels:
+          create_kwargs["labels"] = self.labels
+        raw = self.j.create_issue(**create_kwargs)
         logger.info(
             "Created issue {issue_key} for alert {alert_num} in {repo_id}.".format(
                 issue_key=raw.key, alert_num=alert_num, repo_id=repo_id
@@ -302,10 +306,6 @@ class JiraIssue:
                 action=action, issue_key=self.rawissue.key
             )
         )
-
-    def persist_labels(self, labels):
-        if labels:
-            self.rawissue.update(fields={"labels": self.labels})
 
 
 def parse_alert_info(desc):
