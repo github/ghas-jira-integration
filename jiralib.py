@@ -176,7 +176,7 @@ class JiraProject:
         alert_num,
         repo_key,
         alert_key,
-        tool_name,
+        tool_name
     ):
         raw = self.j.create_issue(
             project=self.projectkey,
@@ -341,11 +341,12 @@ def parse_alert_info(desc):
     m = re.search("ALERT_KEY=(.*)$", desc, re.MULTILINE)
     if m is None:
         return failed
-    alert_key = m.group(1)
-    if m is None:
-        return failed
     tool_name = m.group(1)
     m = re.search("TOOL_NAME=(.*)$", desc, re.MULTILINE)
+    if m is None:
+        return failed
+    alert_key = m.group(1)
+
 
     return repo_id, alert_num, repo_key, alert_key, alert_type, tool_name
 
