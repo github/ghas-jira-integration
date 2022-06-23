@@ -296,6 +296,9 @@ class Alert(AlertBase):
     def short_desc(self):
         return self.json["rule"]["id"]
 
+    def tool_name(self):
+        return self.json["tool"]["name"]
+
     def get_key(self):
         return util.make_key(self.github_repo.repo_id + "/" + str(self.number()))
 
