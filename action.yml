@@ -35,6 +35,10 @@ inputs:
     description: 'Custom reopen state'
     required: false
     default: 'To Do'
+  jira_issuetype:
+    description: 'What type of issue to create'
+    required: false
+    default: 'Bug'
 runs:
   using: composite
   steps:
@@ -48,6 +52,7 @@ runs:
       INPUTS_JIRA_TOKEN: ${{ inputs.jira_token }}
       INPUTS_JIRA_PROJECT: ${{ inputs.jira_project }}
       INPUTS_JIRA_LABELS: ${{ inputs.jira_labels }}
+      INPUTS_JIRA_ISSUETYPE: ${{ inputs.jira_issuetype }}
       INPUTS_SYNC_DIRECTION: ${{ inputs.sync_direction }}
       INPUTS_ISSUE_END_STATE: ${{ inputs.issue_end_state }}
       INPUTS_ISSUE_REOPEN_STATE: ${{ inputs.issue_reopen_state }}
@@ -64,6 +69,7 @@ runs:
         --jira-token "$INPUTS_JIRA_TOKEN" \
         --jira-project "$INPUTS_JIRA_PROJECT" \
         --jira-labels "$INPUTS_JIRA_LABELS" \
+        --jira-issuetype "$INPUTS_JIRA_ISSUETYPE" \
         --direction "$INPUTS_SYNC_DIRECTION" \
         --issue-end-state "$INPUTS_ISSUE_END_STATE" \
-        --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE"
+        --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE" 

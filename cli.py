@@ -55,7 +55,7 @@ def serve(args):
     jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
     s = Sync(
         github,
-        jira.getProject(args.jira_project, args.jira_labels),
+        jira.getProject(args.jira_project, args.jira_labels, args.jira_issuetype),
         direction=direction_str_to_num(args.direction),
     )
     server.run_server(s, args.secret, port=args.port)
@@ -208,6 +208,7 @@ def main():
         help="Webhook secret. Alternatively, the GH2JIRA_SECRET may be set.",
         default=os.getenv("GH2JIRA_SECRET"),
     )
+    credential_base.add_argument("--jira-issuetype", help="JIRA issue type to create", default="Bug")
 
     direction_base = argparse.ArgumentParser(add_help=False)
     direction_base.add_argument(

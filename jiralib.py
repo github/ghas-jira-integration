@@ -55,8 +55,8 @@ class Jira:
     def auth(self):
         return self.user, self.token
 
-    def getProject(self, projectkey, endstate, reopenstate, labels):
-        return JiraProject(self, projectkey, endstate, reopenstate, labels)
+    def getProject(self, projectkey, endstate, reopenstate, labels, issuetype):
+        return JiraProject(self, projectkey, endstate, reopenstate, labels, issuetype)
 
     def list_hooks(self):
         resp = requests.get(
@@ -101,13 +101,14 @@ class Jira:
 
 
 class JiraProject:
-    def __init__(self, jira, projectkey, endstate, reopenstate, labels):
+    def __init__(self, jira, projectkey, endstate, reopenstate, labels, issuetype):
         self.jira = jira
         self.labels = labels.split(",") if labels else []
         self.projectkey = projectkey
         self.j = self.jira.j
         self.endstate = endstate
         self.reopenstate = reopenstate
+        self.issuetype = issuetype
 
     def get_state_issue(self, issue_key="-"):
         if issue_key != "-":
@@ -128,7 +129,7 @@ class JiraProject:
                 project=self.projectkey,
                 summary=STATE_ISSUE_SUMMARY,
                 description=STATE_ISSUE_TEMPLATE,
-                issuetype={"name": "Bug"},
+                issuetype={"name": self.issuetype},
                 labels=self.labels,
             )
         elif len(issues) > 1:
@@ -176,6 +177,7 @@ class JiraProject:
         repo_key,
         alert_key,
     ):
+        logger.info("issue type is %s", self.issuetype)
         raw = self.j.create_issue(
             project=self.projectkey,
             summary="{prefix} {short_desc} in {repo}".format(
@@ -190,7 +192,7 @@ class JiraProject:
                 repo_key=repo_key,
                 alert_key=alert_key,
             ),
-            issuetype={"name": "Bug"},
+            issuetype={"name": self.issuetype},
             labels=self.labels,
         )
         logger.info(
