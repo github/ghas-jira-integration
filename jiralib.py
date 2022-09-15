@@ -190,7 +190,7 @@ class JiraProject:
                 repo_key=repo_key,
                 alert_key=alert_key,
             ),
-            issuetype={"name": "Bug"},
+            issuetype={"name": "Task"},
             labels=self.labels,
         )
         logger.info(
