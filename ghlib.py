@@ -296,6 +296,12 @@ class Alert(AlertBase):
     def short_desc(self):
         return self.json["rule"]["id"]
 
+    def severity(self):
+        return self.json["rule"]["security_severity_level"]
+
+    def location(self):
+        return self.json["most_recent_instance"]["location"]["path"]
+
     def get_key(self):
         return util.make_key(self.github_repo.repo_id + "/" + str(self.number()))
 
