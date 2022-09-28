@@ -57,6 +57,8 @@ class Sync:
             newissue = self.jira.create_issue(
                 alert.github_repo.repo_id,
                 alert.short_desc(),
+                alert.severity(),
+                alert.location(),
                 alert.long_desc(),
                 alert.hyperlink(),
                 alert.get_type(),

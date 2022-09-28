@@ -21,6 +21,10 @@ DESC_TEMPLATE = """
 
 {alert_url}
 
+SEVERITY: {severity}
+
+LOCATION: {location}
+
 ----
 This issue was automatically generated from a GitHub alert, and will be automatically resolved once the underlying problem is fixed.
 DO NOT MODIFY DESCRIPTION BELOW LINE.
@@ -169,6 +173,8 @@ class JiraProject:
         self,
         repo_id,
         short_desc,
+        severity,
+        location,
         long_desc,
         alert_url,
         alert_type,
@@ -182,6 +188,8 @@ class JiraProject:
                 prefix=TITLE_PREFIXES[alert_type], short_desc=short_desc, repo=repo_id
             ),
             description=DESC_TEMPLATE.format(
+                severity=severity,
+                location=location,
                 long_desc=long_desc,
                 alert_url=alert_url,
                 repo_id=repo_id,
