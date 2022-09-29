@@ -1,3 +1,4 @@
+import config
 import jiralib
 import logging
 import itertools
@@ -53,7 +54,7 @@ class Sync:
 
         # make sure that each alert has at least
         # one issue associated with it
-        if len(issues) == 0:
+        if len(issues) == 0 and alert.severity() in config.SEVERITIES_TO_SYNC:
             newissue = self.jira.create_issue(
                 alert.github_repo.repo_id,
                 alert.short_desc(),
