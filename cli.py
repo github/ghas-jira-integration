@@ -4,6 +4,8 @@ import jiralib
 import os
 import sys
 import json
+
+import newrelic
 import util
 from sync import Sync, DIRECTION_G2J, DIRECTION_J2G, DIRECTION_BOTH
 import logging
@@ -62,6 +64,9 @@ def serve(args):
 
 
 def sync(args):
+    # Added logging for new Relic
+    log = newrelic.HTTPCallLog("GHAS2JIRA-Sync")
+
     if not args.gh_url or not args.jira_url:
         fail("Both GitHub and JIRA URL have to be specified!")
 
@@ -79,34 +84,39 @@ def sync(args):
 
     if not args.gh_repo:
         fail("No GitHub repository specified!")
+    try:
+        github = ghlib.GitHub(args.gh_url, args.gh_token)
+        jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+        jira_project = jira.getProject(
+            args.jira_project,
+            args.issue_end_state,
+            args.issue_reopen_state,
+            args.jira_labels,
+        )
+        repo_id = args.gh_org + "/" + args.gh_repo
 
-    github = ghlib.GitHub(args.gh_url, args.gh_token)
-    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
-    jira_project = jira.getProject(
-        args.jira_project,
-        args.issue_end_state,
-        args.issue_reopen_state,
-        args.jira_labels,
-    )
-    repo_id = args.gh_org + "/" + args.gh_repo
+        if args.state_file:
+            if args.state_issue:
+                fail("--state-file and --state-issue are mutually exclusive!")
 
-    if args.state_file:
-        if args.state_issue:
-            fail("--state-file and --state-issue are mutually exclusive!")
+            state = util.state_from_file(args.state_file)
+        elif args.state_issue:
+            state = jira_project.fetch_repo_state(repo_id, args.state_issue)
+        else:
+            state = {}
 
-        state = util.state_from_file(args.state_file)
-    elif args.state_issue:
-        state = jira_project.fetch_repo_state(repo_id, args.state_issue)
-    else:
-        state = {}
+        s = Sync(github, jira_project, direction=direction_str_to_num(args.direction))
+        s.sync_repo(repo_id, states=state)
 
-    s = Sync(github, jira_project, direction=direction_str_to_num(args.direction))
-    s.sync_repo(repo_id, states=state)
+        if args.state_file:
+            util.state_to_file(args.state_file, state)
+        elif args.state_issue:
+            jira_project.save_repo_state(repo_id, state, args.state_issue)
+    except Exception as err:
+        log.failure(None, 500, err)
+        return
 
-    if args.state_file:
-        util.state_to_file(args.state_file, state)
-    elif args.state_issue:
-        jira_project.save_repo_state(repo_id, state, args.state_issue)
+    log.success(None, 200)
 
 
 def check_hooks(args):

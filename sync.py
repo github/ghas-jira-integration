@@ -1,7 +1,10 @@
+import jira.exceptions
+
 import config
 import jiralib
 import logging
 import itertools
+import newrelic
 
 logger = logging.getLogger(__name__)
 
@@ -55,18 +58,26 @@ class Sync:
         # make sure that each alert has at least
         # one issue associated with it
         if len(issues) == 0 and alert.severity() in config.SEVERITIES_TO_SYNC:
-            newissue = self.jira.create_issue(
-                alert.github_repo.repo_id,
-                alert.short_desc(),
-                alert.severity(),
-                alert.location(),
-                alert.long_desc(),
-                alert.hyperlink(),
-                alert.get_type(),
-                alert.number(),
-                alert.github_repo.get_key(),
-                alert.get_key(),
-            )
+            log = newrelic.HTTPCallLog("GHAS2JIRA-create_issue")
+            # Added Try/Catch to catch the possible JIRAError
+            # See Jira/client.py line 1319
+            try:
+                newissue = self.jira.create_issue(
+                    alert.github_repo.repo_id,
+                    alert.short_desc(),
+                    alert.severity(),
+                    alert.location(),
+                    alert.long_desc(),
+                    alert.hyperlink(),
+                    alert.get_type(),
+                    alert.number(),
+                    alert.github_repo.get_key(),
+                    alert.get_key(),
+                )
+            except jira.exceptions.JIRAError as err:
+                log.failure(err.response, err.status_code, err)
+                return None
+            log.success(None)
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
 

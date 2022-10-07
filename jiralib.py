@@ -1,9 +1,12 @@
-from jira import JIRA
+from jira import JIRA, JIRAError
 import re
+
+import newrelic
 import util
 import logging
 import requests
 import json
+import requests.exceptions as errors
 
 # JIRA Webhook events
 UPDATE_EVENT = "jira:issue_updated"
@@ -12,8 +15,8 @@ DELETE_EVENT = "jira:issue_deleted"
 
 
 TITLE_PREFIXES = {
-    "Alert": "[Code Scanning Alert]:",
-    "Secret": "[Secret Scanning Alert]:",
+    "Alert": "[Code Scanning Alert]",
+    "Secret": "[Secret Scanning Alert]",
 }
 
 DESC_TEMPLATE = """
@@ -63,16 +66,23 @@ class Jira:
         return JiraProject(self, projectkey, endstate, reopenstate, labels)
 
     def list_hooks(self):
+        # Added New relic logging
+        log = newrelic.HTTPCallLog("GHAS2JIRA-list_hooks")
         resp = requests.get(
             "{api_url}/rest/webhooks/1.0/webhook".format(api_url=self.url),
             headers={"Content-Type": "application/json"},
             auth=self.auth(),
             timeout=util.REQUEST_TIMEOUT,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            log.failure(resp, resp.status_code, err)
 
+        log.success(resp.json())
         for h in resp.json():
             yield h
+
 
     def create_hook(
         self,
@@ -83,6 +93,8 @@ class Jira:
         filters={"issue-related-events-section": ""},
         exclude_body=False,
     ):
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-create-hook")
         data = json.dumps(
             {
                 "name": name,
@@ -99,8 +111,13 @@ class Jira:
             auth=self.auth(),
             timeout=util.REQUEST_TIMEOUT,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except errors.HTTPError as err:
+            log.failure(resp, resp.status_code, err)
+            raise
 
+        log.success(resp.json())
         return resp.json()
 
 
@@ -156,6 +173,19 @@ class JiraProject:
 
         return {}
 
+    def map_severity_to_id(self, severity):
+        if severity == "critical":
+            return "13588"
+        elif severity == "high":
+            return "13589"
+        elif severity == "medium":
+            return "13590"
+        elif severity == "low":
+            return "13591"
+        else:
+            log = newrelic.CustomEvent("GHAS2JIRA-No High or Critical Found")
+            return "13591"
+
     def save_repo_state(self, repo_id, state, issue_key="-"):
         i = self.get_state_issue(issue_key)
 
@@ -182,39 +212,50 @@ class JiraProject:
         repo_key,
         alert_key,
     ):
-        raw = self.j.create_issue(
-            project=self.projectkey,
-            summary="{prefix} {repo}:{short_desc}".format(
-                prefix=TITLE_PREFIXES[alert_type], repo=repo_id, short_desc=short_desc
-            ),
-            description=DESC_TEMPLATE.format(
-                severity=severity,
-                location=location,
-                long_desc=long_desc,
-                alert_url=alert_url,
-                repo_id=repo_id,
-                alert_type=alert_type,
-                alert_num=alert_num,
-                repo_key=repo_key,
-                alert_key=alert_key,
-            ),
-            issuetype={"name": "Task"},
-            labels=self.labels,
-        )
-        logger.info(
-            "Created issue {issue_key} for alert {alert_num} in {repo_id}.".format(
-                issue_key=raw.key, alert_num=alert_num, repo_id=repo_id
-            )
-        )
-        logger.info(
-            "Created issue {issue_key} for {alert_type} {alert_num} in {repo_id}.".format(
-                issue_key=raw.key,
-                alert_type=alert_type,
-                alert_num=alert_num,
-                repo_id=repo_id,
-            )
-        )
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-create-issue")
+        try:
+            raw = self.j.create_issue(
+                project=self.projectkey,
+                summary="{prefix} in {repo}:{short_desc}".format(
+                    prefix=TITLE_PREFIXES[alert_type], repo=repo_id, short_desc=short_desc
+                ),
+                description=DESC_TEMPLATE.format(
+                    severity=severity.upper(),
+                    location=location,
+                    long_desc=long_desc,
+                    alert_url=alert_url,
+                    repo_id=repo_id,
+                    alert_type=alert_type,
+                    alert_num=alert_num,
+                    repo_key=repo_key,
+                    alert_key=alert_key,
+                ),
+                issuetype={"name": "Task"},
+                customfield_16205={"id": self.map_severity_to_id(severity)},
+                customfield_16203=location,
+                customfield_16204=repo_id,
 
+                labels=self.labels,
+            )
+            logger.info(
+                "Created issue {issue_key} for alert {alert_num} in {repo_id}.".format(
+                    issue_key=raw.key, alert_num=alert_num, repo_id=repo_id
+                )
+            )
+            logger.info(
+                "Created issue {issue_key} for {alert_type} {alert_num} in {repo_id}.".format(
+                    issue_key=raw.key,
+                    alert_type=alert_type,
+                    alert_num=alert_num,
+                    repo_id=repo_id,
+                )
+            )
+        except JIRAError as err:
+            log.failure(err.response, err.status_code, err)
+            raise
+
+        log.success(raw.__dict__)
         return JiraIssue(self, raw)
 
     def fetch_issues(self, key):

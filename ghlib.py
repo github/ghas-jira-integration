@@ -1,6 +1,8 @@
 import requests
 import logging
 import json
+
+import newrelic
 import util
 from requests import HTTPError
 
@@ -39,6 +41,8 @@ class GitHub:
         return self.list_hooks_helper(org)
 
     def list_hooks_helper(self, entity):
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-list-hooks-helper")
         if "/" in entity:
             etype = "repos"
         else:
@@ -56,18 +60,23 @@ class GitHub:
         )
 
         while True:
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
 
-            for h in resp.json():
-                yield h
+                for h in resp.json():
+                    yield h
 
-            nextpage = resp.links.get("next", {}).get("url", None)
-            if not nextpage:
-                break
+                nextpage = resp.links.get("next", {}).get("url", None)
+                if not nextpage:
+                    break
 
-            resp = requests.get(
-                nextpage, headers=self.default_headers(), timeout=util.REQUEST_TIMEOUT
-            )
+                resp = requests.get(
+                    nextpage, headers=self.default_headers(), timeout=util.REQUEST_TIMEOUT
+                )
+            except HTTPError as err:
+                log.failure(resp, resp.status_code, err)
+
+        log.success(resp.json())
 
     def create_org_hook(
         self,
@@ -93,7 +102,8 @@ class GitHub:
         insecure_ssl="0",
         content_type="json",
     ):
-
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-create-hook-helper")
         if "/" in entity:
             etype = "repos"
         else:
@@ -120,7 +130,12 @@ class GitHub:
             data=data,
             timeout=util.REQUEST_TIMEOUT,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except HTTPError as err:
+            log.failure(resp, resp.status_code, err)
+            raise
+        log.success(resp.json())
         return resp.json()
 
 
@@ -168,6 +183,8 @@ class GHRepository:
             )
 
             while True:
+                # Added logging for new Relic
+                log = newrelic.HTTPCallLog("GHAS2JIRA-alerts-helper")
                 resp.raise_for_status()
 
                 for a in resp.json():
@@ -187,12 +204,18 @@ class GHRepository:
             if httpe.response.status_code == 404:
                 # A 404 suggests that the repository doesn't exist
                 # so we return an empty list
+                log.success(resp.json(), 404)
                 pass
             else:
                 # propagate everything else
+                log.failure(resp.json(), resp.status_code, httpe)
                 raise
 
+        log.success(resp.json())
+
     def get_info(self):
+        # Added Logging for New Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-get-info")
         resp = requests.get(
             "{api_url}/repos/{repo_id}".format(
                 api_url=self.gh.url, repo_id=self.repo_id
@@ -200,8 +223,13 @@ class GHRepository:
             headers=self.gh.default_headers(),
             timeout=util.REQUEST_TIMEOUT,
         )
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp.raise_for_status()
+            return resp.json()
+        except HTTPError as err:
+            log.failure(resp, resp.status_code, err)
+            # Re-raise the exception after the call to log is done.
+            raise
 
     def isprivate(self):
         return self.get_info()["private"]
@@ -219,6 +247,8 @@ class GHRepository:
             yield Secret(self, a)
 
     def get_alert(self, alert_num):
+        # Added Logging for New Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-get-alert")
         resp = requests.get(
             "{api_url}/repos/{repo_id}/code-scanning/alerts/{alert_num}".format(
                 api_url=self.gh.url, repo_id=self.repo_id, alert_num=alert_num
@@ -228,15 +258,17 @@ class GHRepository:
         )
         try:
             resp.raise_for_status()
+            log.success(resp.json())
             return Alert(self, resp.json())
         except HTTPError as httpe:
             if httpe.response.status_code == 404:
                 # A 404 suggests that the alert doesn't exist
+                log.success(resp.json(), 404)
                 return None
             else:
                 # propagate everything else
+                log.failure(resp.json(), httpe.response.status_code, httpe)
                 raise
-
 
 class AlertBase:
     def __init__(self, github_repo, json):
@@ -306,6 +338,8 @@ class Alert(AlertBase):
         return util.make_key(self.github_repo.repo_id + "/" + str(self.number()))
 
     def do_adjust_state(self, target_state):
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-do-adjust-state")
         state = "open"
         reason = ""
         if not target_state:
@@ -322,7 +356,13 @@ class Alert(AlertBase):
             headers=self.gh.default_headers(),
             timeout=util.REQUEST_TIMEOUT,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except HTTPError as err:
+            log.failure(resp, resp.status_code, err)
+            raise
+
+        log.success(resp.json())
 
 
 class Secret(AlertBase):
@@ -344,6 +384,8 @@ class Secret(AlertBase):
         )
 
     def do_adjust_state(self, target_state):
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-do-adjust-state-secret")
         state = "open"
         resolution = ""
         if not target_state:
@@ -362,4 +404,10 @@ class Secret(AlertBase):
             headers=self.gh.default_headers(),
             timeout=util.REQUEST_TIMEOUT,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except HTTPError as err:
+            log.failure(resp.json(), resp.status_code, err)
+            raise
+
+        log.success(resp.json())

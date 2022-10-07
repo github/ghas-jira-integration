@@ -5,3 +5,6 @@ flask~=2.0.0
 jira~=3.0.0
 logging-formatter-anticrlf==1.2
 requests~=2.26.0
+
+httpx~=0.23.0
+structlog~=22.1.0
