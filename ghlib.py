@@ -76,7 +76,7 @@ class GitHub:
             except HTTPError as err:
                 log.failure(resp, resp.status_code, err)
 
-        log.success(resp.json())
+        log.successful(resp.json())
 
     def create_org_hook(
         self,
@@ -135,7 +135,7 @@ class GitHub:
         except HTTPError as err:
             log.failure(resp, resp.status_code, err)
             raise
-        log.success(resp.json())
+        log.successful(resp.json())
         return resp.json()
 
 
@@ -204,14 +204,14 @@ class GHRepository:
             if httpe.response.status_code == 404:
                 # A 404 suggests that the repository doesn't exist
                 # so we return an empty list
-                log.success(resp.json(), 404)
+                log.successful(resp.json(), 404)
                 pass
             else:
                 # propagate everything else
                 log.failure(resp.json(), resp.status_code, httpe)
                 raise
 
-        log.success(resp.json())
+        log.successful(resp.json())
 
     def get_info(self):
         # Added Logging for New Relic
@@ -258,12 +258,12 @@ class GHRepository:
         )
         try:
             resp.raise_for_status()
-            log.success(resp.json())
+            log.successful(resp.json())
             return Alert(self, resp.json())
         except HTTPError as httpe:
             if httpe.response.status_code == 404:
                 # A 404 suggests that the alert doesn't exist
-                log.success(resp.json(), 404)
+                log.successful(resp.json(), 404)
                 return None
             else:
                 # propagate everything else
@@ -362,7 +362,7 @@ class Alert(AlertBase):
             log.failure(resp, resp.status_code, err)
             raise
 
-        log.success(resp.json())
+        log.successful(resp.json())
 
 
 class Secret(AlertBase):
@@ -410,4 +410,4 @@ class Secret(AlertBase):
             log.failure(resp.json(), resp.status_code, err)
             raise
 
-        log.success(resp.json())
+        log.successful(resp.json())

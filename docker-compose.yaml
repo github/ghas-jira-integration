@@ -1,0 +1,37 @@
+version: '3'
+services:
+  ghas-jira-integration:
+    build: ./
+    image: ghas-jira-integration:dev
+    stdin_open: true
+    tty: true
+    env_file:
+      - env.dev
+    ports:
+      - 8086:8080
+    working_dir: /app
+    networks:
+      - sem_app
+    depends_on:
+      - mariadb
+
+  mariadb:
+    image: mariadb
+    container_name: ghas-jira-integration_dev
+    volumes:
+      - data-mysql:/var/lib/mysql
+      - ./mysql:/docker-entrypoint-initdb.d:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=ghas-jira-integration_dev
+    networks:
+      - sem_app
+    ports:
+      - 3309:3306
+
+volumes:
+  data-mysql:
+    driver: local
+
+networks:
+  sem_app:

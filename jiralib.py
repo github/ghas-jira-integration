@@ -79,7 +79,7 @@ class Jira:
         except requests.exceptions.HTTPError as err:
             log.failure(resp, resp.status_code, err)
 
-        log.success(resp.json())
+        log.successful(resp.json())
         for h in resp.json():
             yield h
 
@@ -117,7 +117,7 @@ class Jira:
             log.failure(resp, resp.status_code, err)
             raise
 
-        log.success(resp.json())
+        log.successful(resp.json())
         return resp.json()
 
 
@@ -184,6 +184,7 @@ class JiraProject:
             return "13591"
         else:
             log = newrelic.CustomEvent("GHAS2JIRA-No High or Critical Found")
+            log.send()
             return "13591"
 
     def save_repo_state(self, repo_id, state, issue_key="-"):
@@ -255,7 +256,7 @@ class JiraProject:
             log.failure(err.response, err.status_code, err)
             raise
 
-        log.success(raw.__dict__)
+        log.successful(raw.__dict__)
         return JiraIssue(self, raw)
 
     def fetch_issues(self, key):

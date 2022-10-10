@@ -22,8 +22,7 @@ async def send_to_newrelic(event_dict):
     )
     # Your New Relic API Key
     # https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/
-    #headers = {"Api-Key": os.environ["NEWRELIC-API_KEY"]}
-    headers = {"Api-Key": "66512c2710031c1db0eacbcce35a8ad0edba7723"}
+    headers = {"Api-Key": os.environ["NEWRELIC-API_KEY"]}
 
     # Our log message and all the event context is sent as a JSON string
     # in the POST body
@@ -78,7 +77,7 @@ class CustomEvent(object):
     def log(self):
         return self.__dict__
 
-    def _send(self):
+    def send(self):
         asyncio.run(send_to_newrelic(self.log()))
 
 class HTTPCallLog(object):

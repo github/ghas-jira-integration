@@ -77,7 +77,9 @@ class Sync:
             except jira.exceptions.JIRAError as err:
                 log.failure(err.response, err.status_code, err)
                 return None
-            log.success(None)
+
+            log.successful(None)
+
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
 
@@ -112,6 +114,8 @@ class Sync:
             return issue.get_state()
 
     def sync_repo(self, repo_id, states=None):
+        # Added logging for new Relic
+        log = newrelic.HTTPCallLog("GHAS2JIRA-sync-" + repo_id)
         logger.info(
             "Performing full sync on repository {repo_id}...".format(repo_id=repo_id)
         )
@@ -150,3 +154,4 @@ class Sync:
                 states.pop(akey, None)
             else:
                 states[akey] = new_state
+        log.successful(None)
