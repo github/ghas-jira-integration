@@ -93,7 +93,6 @@ class GitHub:
         insecure_ssl="0",
         content_type="json",
     ):
-
         if "/" in entity:
             etype = "repos"
         else:

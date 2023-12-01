@@ -270,7 +270,6 @@ class JiraIssue:
         return raw_state != self.endstate
 
     def transition(self, transition):
-
         if (
             self.get_state()
             and transition == self.reopenstate
