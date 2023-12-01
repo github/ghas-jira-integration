@@ -12,7 +12,7 @@ The easiest way to use this tool is via its GitHub Action, which you can add to 
 
 * A GitHub repository with Code Scanning enabled and a few alerts. Follow [this guide](https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/setting-up-code-scanning-for-a-repository) to set up Code Scanning.
 * The URL of your Jira Server instance.
-* A [Jira project](https://confluence.atlassian.com/adminjiraserver/creating-a-project-938846813.html) to store your issues. You will need to provide its `project key` to the action.
+* A [Jira project](https://confluence.atlassian.com/adminjiraserver/creating-a-project-938846813.html) to store your issues. You will need to provide its `project key` to the action. (Must be Scrum project type; Kanban will not work.)
 * A Jira Server account (username + password) with the following permissions for the abovementioned project:
   * `Browse Projects`
   * `Close Issues`
