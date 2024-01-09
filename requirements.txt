@@ -1,4 +1,4 @@
-bandit~=1.7.5
+bandit~=1.7.6
 black~=23.12.1
 flake8~=7.0.0
 flask~=2.3.0
