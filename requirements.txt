@@ -1,5 +1,5 @@
 bandit~=1.7.7
-black~=23.12.1
+black~=24.1.0
 flake8~=7.0.0
 flask~=2.3.0
 jira~=3.0.0
