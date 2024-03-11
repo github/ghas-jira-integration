@@ -29,6 +29,7 @@ ALERT_TYPE={alert_type}
 ALERT_NUMBER={alert_num}
 REPOSITORY_KEY={repo_key}
 ALERT_KEY={alert_key}
+TOOL_NAME={tool_name}
 """
 
 
@@ -175,6 +176,7 @@ class JiraProject:
         alert_num,
         repo_key,
         alert_key,
+        tool_name
     ):
         raw = self.j.create_issue(
             project=self.projectkey,
@@ -189,6 +191,7 @@ class JiraProject:
                 alert_num=alert_num,
                 repo_key=repo_key,
                 alert_key=alert_key,
+                tool_name=tool_name,
             ),
             issuetype={"name": "Bug"},
             labels=self.labels,
@@ -204,6 +207,7 @@ class JiraProject:
                 alert_type=alert_type,
                 alert_num=alert_num,
                 repo_id=repo_id,
+                tool_name=tool_name
             )
         )
 
@@ -313,7 +317,7 @@ def parse_alert_info(desc):
     them as a tuple. If parsing fails for one of the fields,
     return a tuple of None's.
     """
-    failed = None, None, None, None
+    failed = None, None, None, None, None
     m = re.search("REPOSITORY_NAME=(.*)$", desc, re.MULTILINE)
     if m is None:
         return failed
@@ -336,9 +340,14 @@ def parse_alert_info(desc):
     m = re.search("ALERT_KEY=(.*)$", desc, re.MULTILINE)
     if m is None:
         return failed
+    tool_name = m.group(1)
+    m = re.search("TOOL_NAME=(.*)$", desc, re.MULTILINE)
+    if m is None:
+        return failed
     alert_key = m.group(1)
 
-    return repo_id, alert_num, repo_key, alert_key, alert_type
+
+    return repo_id, alert_num, repo_key, alert_key, alert_type, tool_name
 
 
 def repo_id_to_fname(repo_id):
