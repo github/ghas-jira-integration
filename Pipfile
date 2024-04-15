@@ -6,7 +6,7 @@ verify_ssl = true
 [packages]
 flask = "~=2.3.0"
 requests = "~=2.31.0"
-jira = "~=3.0.0"
+jira = "~=3.8.0"
 logging-formatter-anticrlf = "~=1.2.1"
 
 [requires]
