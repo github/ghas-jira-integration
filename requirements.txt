@@ -1,7 +1,0 @@
-bandit~=1.7.9
-black~=24.4.2
-flake8~=7.1.0
-flask~=2.3.0
-jira~=3.0.0
-logging-formatter-anticrlf==1.2.1
-requests~=2.26.0
