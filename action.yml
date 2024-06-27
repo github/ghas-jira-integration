@@ -52,15 +52,11 @@ runs:
       INPUTS_ISSUE_END_STATE: ${{ inputs.issue_end_state }}
       INPUTS_ISSUE_REOPEN_STATE: ${{ inputs.issue_reopen_state }}
     run: |
-      # Install pipenv to a temporary directory
-      # We use a temporary directory because the action didn't previously have a requirement for
-      # pipenv to be installed, and we don't want to pollute the user's existing pip installations.
-      pip3 install pipenv --target "$RUNNER_TEMP/pip"
-      # Run pipenv from the temporary directory
-      $RUNNER_TEMP/pip/pipenv install
+      pip3 install pipenv
+      pipenv install
       REPOSITORY_NAME="$(echo "$GITHUB_REPOSITORY" | cut -d/ -f 2)"
       # Run pipenv from the temporary directory
-      $RUNNER_TEMP/pip/pipenv run ./gh2jira sync \
+      pipenv run ./gh2jira sync \
         --gh-url "$GITHUB_API_URL" \
         --gh-token "$INPUTS_GITHUB_TOKEN" \
         --gh-org "$GITHUB_REPOSITORY_OWNER" \
