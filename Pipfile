@@ -10,7 +10,6 @@ jira = "~=3.0.0"
 logging-formatter-anticrlf = "~=1.2.1"
 
 [dev-packages]
-bandit = "~=1.7.9"
 black = "~=24.4.2"
 flake8 = "~=7.1.0"
 

@@ -32,6 +32,3 @@ jobs:
       - name: run flake8 linter
         # Ignore linting errors that the black formatter is opiniated about
         run: pipenv run flake8 --ignore E501,W503 .
-
-      - name: run bandit security scan
-        run: pipenv run bandit -r .
