@@ -52,9 +52,11 @@ runs:
       INPUTS_ISSUE_END_STATE: ${{ inputs.issue_end_state }}
       INPUTS_ISSUE_REOPEN_STATE: ${{ inputs.issue_reopen_state }}
     run: |
-      pip3 install -r requirements.txt
+      pip3 install pipenv
+      pipenv install
       REPOSITORY_NAME="$(echo "$GITHUB_REPOSITORY" | cut -d/ -f 2)"
-      ./gh2jira sync \
+      # Run pipenv from the temporary directory
+      pipenv run ./gh2jira sync \
         --gh-url "$GITHUB_API_URL" \
         --gh-token "$INPUTS_GITHUB_TOKEN" \
         --gh-org "$GITHUB_REPOSITORY_OWNER" \

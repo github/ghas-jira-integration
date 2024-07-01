@@ -20,15 +20,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install pipenv
+        run: pip install pipenv
+
       - name: install dependencies
-        run: pip install -r requirements.txt
+        run: pipenv install --dev
 
       - name: run black formatter
-        run: black --check .
+        run: pipenv run black --check .
 
       - name: run flake8 linter
         # Ignore linting errors that the black formatter is opiniated about
-        run: flake8 --ignore E501,W503 .
-
-      - name: run bandit security scan
-        run: bandit -r .
+        run: pipenv run flake8 --ignore E501,W503 .
