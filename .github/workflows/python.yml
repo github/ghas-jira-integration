@@ -27,7 +27,7 @@ jobs:
         run: pipenv install --dev
 
       - name: run black formatter
-        run: pipenv run black --check .
+        run: pipenv run black --check --exclude=vendor .
 
       - name: run flake8 linter
         # Ignore linting errors that the black formatter is opiniated about
