@@ -12,6 +12,7 @@ logging-formatter-anticrlf = "~=1.2.1"
 [dev-packages]
 black = "~=24.8.0"
 typing_extensions = "*"
+tomli = "*"
 flake8 = "~=7.1.1"
 
 [requires]
