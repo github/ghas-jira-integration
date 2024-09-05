@@ -113,6 +113,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# for this POC we do not check-in the pipenv `lock` file
-Pipfile.lock

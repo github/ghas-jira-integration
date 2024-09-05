@@ -5,20 +5,21 @@ on:
     branches:
       - main
 
-env:
-  PYTHON_VERSION: "3.10.0"
-
 jobs:
   python:
-    runs-on: ubuntu-20.04
-    name: python
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Install pipenv
         run: pip install pipenv
@@ -27,8 +28,8 @@ jobs:
         run: pipenv install --dev
 
       - name: run black formatter
-        run: pipenv run black --check .
+        run: pipenv run fmt
 
       - name: run flake8 linter
         # Ignore linting errors that the black formatter is opiniated about
-        run: pipenv run flake8 --ignore E501,W503 .
+        run: pipenv run lint

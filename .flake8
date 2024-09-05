@@ -1,0 +1,4 @@
+; Ignore vendor and migrations directories
+[flake8]
+exclude =
+    vendor
