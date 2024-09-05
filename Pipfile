@@ -19,6 +19,8 @@ flake8 = "~=7.1.1"
 python_version = "3"
 
 [scripts]
-gh2jira = "python -m jira2github.cli"
+# Formatting / Linting
+fmt = "black --check --exclude=vendor ."
+lint = "flake8 --ignore E501,W503 ."
 # Vendor Script
 vendor = "./vendor/update.sh"
