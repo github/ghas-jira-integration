@@ -15,3 +15,8 @@ flake8 = "~=7.1.1"
 
 [requires]
 python_version = "3"
+
+[scripts]
+gh2jira = "python -m jira2github.cli"
+# Vendor Script
+vendor = "./vendor/update.sh"

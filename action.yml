@@ -52,8 +52,7 @@ runs:
       INPUTS_ISSUE_END_STATE: ${{ inputs.issue_end_state }}
       INPUTS_ISSUE_REOPEN_STATE: ${{ inputs.issue_reopen_state }}
     run: |
-      pip3 install pipenv
-      pipenv install
+      export PYTHONPATH=${{ github.action_path }}:${{ github.action_path }}/vendor
       REPOSITORY_NAME="$(echo "$GITHUB_REPOSITORY" | cut -d/ -f 2)"
       # Run pipenv from the temporary directory
       pipenv run ./gh2jira sync \
