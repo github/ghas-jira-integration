@@ -1,0 +1,2 @@
+class UnsafeSubstitutionError(Exception):
+    pass
