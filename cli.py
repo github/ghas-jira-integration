@@ -105,10 +105,17 @@ def sync(args):
     s = Sync(github, jira_project, direction=direction_str_to_num(args.direction))
     s.sync_repo(repo_id, states=state)
 
+    print("1")
+    
     if args.state_file:
+        print("2")
         util.state_to_file(args.state_file, state)
+        print("2.1")
     elif args.state_issue:
+        print("3")
         jira_project.save_repo_state(repo_id, state, args.state_issue)
+        print("3.1")
+    print("4")
 
 
 def check_hooks(args):
