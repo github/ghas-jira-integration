@@ -102,7 +102,7 @@ def sync(args):
 
     print args
 
-    s = Sync(github, jira_project, direction=direction_str_to_num(args.direction_base))
+    s = Sync(github, jira_project, direction=direction_str_to_num(args.direction))
     s.sync_repo(repo_id, states=state)
 
     if args.state_file:
