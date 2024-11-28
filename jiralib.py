@@ -163,7 +163,7 @@ class JiraProject:
         # attach the new state file
         attachment = StringIO()
         attachment.write(util.state_to_json(state))
-        self.jira.add_attachment(issue=i, attachment=attachment, filename=repo_id_to_fname(repo_id))
+        self.j.add_attachment(issue=i, attachment=attachment, filename=repo_id_to_fname(repo_id))
 
     def create_issue(
         self,
