@@ -111,7 +111,7 @@ def sync(args):
 
 def check_hooks(args):
     pass
-    
+
 
 def install_hooks(args):
     if not args.hook_url:
