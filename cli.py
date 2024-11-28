@@ -107,7 +107,6 @@ def sync(args):
         util.state_to_file(args.state_file, state)
     elif args.state_issue:
         jira_project.save_repo_state(repo_id, state, args.state_issue)
-
 def check_hooks(args):
     pass
 
