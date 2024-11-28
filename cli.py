@@ -100,7 +100,7 @@ def sync(args):
     else:
         state = {}
 
-    print args
+    print(args)
 
     s = Sync(github, jira_project, direction=direction_str_to_num(args.direction))
     s.sync_repo(repo_id, states=state)
