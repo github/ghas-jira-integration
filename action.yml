@@ -67,6 +67,6 @@ runs:
         --jira-project "$INPUTS_JIRA_PROJECT" \
         --jira-labels "$INPUTS_JIRA_LABELS" \
         --direction "$INPUTS_SYNC_DIRECTION" \
-        --state-issue - ]
+        --state-issue - \
         --issue-end-state "$INPUTS_ISSUE_END_STATE" \
         --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE"
