@@ -27,6 +27,10 @@ inputs:
     description: 'Which direction to synchronize in ("gh2jira", "jira2gh" or "both")'
     required: false
     default: 'both'
+  issue_state_key:
+    description: 'Name of the task that will contain the state file. If not provided it will be created a default one.'
+    required: false
+    default: '-'
   issue_end_state:
     description: 'Custom end state'
     required: false
@@ -51,6 +55,7 @@ runs:
       INPUTS_SYNC_DIRECTION: ${{ inputs.sync_direction }}
       INPUTS_ISSUE_END_STATE: ${{ inputs.issue_end_state }}
       INPUTS_ISSUE_REOPEN_STATE: ${{ inputs.issue_reopen_state }}
+      INPUTS_ISSUE_STATE_KEY: ${{ inputs.issue_state_key }}
     run: |
       pip3 install pipenv
       pipenv install
@@ -67,6 +72,6 @@ runs:
         --jira-project "$INPUTS_JIRA_PROJECT" \
         --jira-labels "$INPUTS_JIRA_LABELS" \
         --direction "$INPUTS_SYNC_DIRECTION" \
-        --state-issue - \
+        --state-issue "INPUTS_ISSUE_STATE_KEY" \
         --issue-end-state "$INPUTS_ISSUE_END_STATE" \
         --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE"
