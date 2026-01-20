@@ -1,4 +1,5 @@
 from jira import JIRA
+from io import StringIO
 import re
 import util
 import logging
@@ -99,7 +100,6 @@ class Jira:
 
         return resp.json()
 
-
 class JiraProject:
     def __init__(self, jira, projectkey, endstate, reopenstate, labels):
         self.jira = jira
@@ -161,9 +161,9 @@ class JiraProject:
                 self.j.delete_attachment(a.id)
 
         # attach the new state file
-        self.jira.attach_file(
-            i.key, repo_id_to_fname(repo_id), util.state_to_json(state)
-        )
+        attachment = StringIO()
+        attachment.write(util.state_to_json(state))
+        self.j.add_attachment(issue=i, attachment=attachment, filename=repo_id_to_fname(repo_id))
 
     def create_issue(
         self,
