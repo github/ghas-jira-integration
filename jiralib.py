@@ -1,4 +1,5 @@
 from jira import JIRA
+import io
 import re
 import util
 import logging
@@ -45,18 +46,104 @@ ISSUE_KEY={issue_key}
 logger = logging.getLogger(__name__)
 
 
+def text_to_adf(text):
+    text = "" if text is None else str(text)
+    paragraphs = []
+
+    for block in re.split(r"\n\s*\n", text.strip("\n")) if text else [""]:
+        lines = block.splitlines()
+        paragraph = {"type": "paragraph"}
+
+        if lines:
+            content = []
+            for i, line in enumerate(lines):
+                if i > 0:
+                    content.append({"type": "hardBreak"})
+                if line:
+                    content.append({"type": "text", "text": line})
+            if content:
+                paragraph["content"] = content
+
+        paragraphs.append(paragraph)
+
+    if not paragraphs:
+        paragraphs = [{"type": "paragraph"}]
+
+    return {"type": "doc", "version": 1, "content": paragraphs}
+
+
+def adf_to_text(adf):
+    if isinstance(adf, str):
+        return adf
+
+    def as_node(node):
+        if isinstance(node, dict):
+            return node
+        if hasattr(node, "__dict__"):
+            return {
+                key: value
+                for key, value in vars(node).items()
+                if not key.startswith("_")
+            }
+        return None
+
+    adf = as_node(adf)
+    if adf is None:
+        return ""
+
+    def node_to_text(node):
+        node = as_node(node)
+        if node is None:
+            return ""
+
+        node_type = node.get("type")
+        if node_type == "text":
+            return node.get("text", "")
+        if node_type == "hardBreak":
+            return "\n"
+
+        return "".join(node_to_text(child) for child in node.get("content", []))
+
+    def collect_paragraphs(node, paragraphs):
+        node = as_node(node)
+        if node is None:
+            return
+
+        if node.get("type") == "paragraph":
+            paragraphs.append(node_to_text(node))
+            return
+
+        for child in node.get("content", []):
+            collect_paragraphs(child, paragraphs)
+
+    paragraphs = []
+    collect_paragraphs(adf, paragraphs)
+    if not paragraphs:
+        return node_to_text(adf)
+    return "\n\n".join(paragraphs)
+
+
 class Jira:
     def __init__(self, url, user, token, api_version="3"):
         self.url = url
         self.user = user
         self.token = token
-        self.j = JIRA(url, basic_auth=(user, token), options={"rest_api_version": api_version})
+        self.api_version = str(api_version)
+        self.j = JIRA(
+            url,
+            basic_auth=(user, token),
+            options={"rest_api_version": self.api_version},
+        )
 
     def auth(self):
         return self.user, self.token
 
     def getProject(self, projectkey, endstate, reopenstate, labels):
         return JiraProject(self, projectkey, endstate, reopenstate, labels)
+
+    def attach_file(self, issue_key, filename, content):
+        data = io.BytesIO(content.encode("utf-8"))
+        return self.j.add_attachment(issue_key, data, filename=filename)
 
     def list_hooks(self):
         resp = requests.get(
@@ -109,6 +196,11 @@ class JiraProject:
         self.endstate = endstate
         self.reopenstate = reopenstate
 
+    def format_description(self, description):
+        if self.jira.api_version == "3":
+            return text_to_adf(description)
+        return description
+
     def get_state_issue(self, issue_key="-"):
         if issue_key != "-":
             return self.j.issue(issue_key)
@@ -127,7 +219,7 @@ class JiraProject:
             return self.j.create_issue(
                 project=self.projectkey,
                 summary=STATE_ISSUE_SUMMARY,
-                description=STATE_ISSUE_TEMPLATE,
+                description=self.format_description(STATE_ISSUE_TEMPLATE),
                 issuetype={"name": "Bug"},
                 labels=self.labels,
             )
@@ -181,14 +273,16 @@ class JiraProject:
             summary="{prefix} {short_desc} in {repo}".format(
                 prefix=TITLE_PREFIXES[alert_type], short_desc=short_desc, repo=repo_id
             ),
-            description=DESC_TEMPLATE.format(
-                long_desc=long_desc,
-                alert_url=alert_url,
-                repo_id=repo_id,
-                alert_type=alert_type,
-                alert_num=alert_num,
-                repo_key=repo_key,
-                alert_key=alert_key,
+            description=self.format_description(
+                DESC_TEMPLATE.format(
+                    long_desc=long_desc,
+                    alert_url=alert_url,
+                    repo_id=repo_id,
+                    alert_type=alert_type,
+                    alert_num=alert_num,
+                    repo_key=repo_key,
+                    alert_key=alert_key,
+                )
             ),
             issuetype={"name": "Bug"},
             labels=self.labels,
@@ -313,7 +407,10 @@ def parse_alert_info(desc):
     them as a tuple. If parsing fails for one of the fields,
     return a tuple of None's.
     """
-    failed = None, None, None, None
+    failed = None, None, None, None, None
+    desc = adf_to_text(desc)
+    if not desc:
+        return failed
     m = re.search("REPOSITORY_NAME=(.*)$", desc, re.MULTILINE)
     if m is None:
         return failed
