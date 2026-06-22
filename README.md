@@ -56,7 +56,13 @@ Currently, two-way integration is not yet possible via the action. If you need i
 
 
 #### Using this Action to synchronize secret scanning alerts
-Secret scanning alerts can only be queried with the API in private repositories. For public repositories, there will just be an empty results list. You'll need to pass in a PAT via `github_token` that has admin rights to access secret scanning alerts. Ensure the PAT has the `security_events` scope:
+Secret scanning alerts can only be queried with the API in private repositories. For public repositories, there will just be an empty results list. You'll need to pass in a PAT via `github_token` that has admin rights to access secret scanning alerts.
+
+The PAT needs the following scope to retrieve secret scanning alerts:
+
+**Fine-grained tokens:** `Secret scanning alerts - Read-only`  
+**Tokens (classic):** `security_events`
+
 ```
         with:
           jira_url: '<INSERT JIRA SERVER URL>'
