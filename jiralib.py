@@ -46,11 +46,11 @@ logger = logging.getLogger(__name__)
 
 
 class Jira:
-    def __init__(self, url, user, token):
+    def __init__(self, url, user, token, api_version="3"):
         self.url = url
         self.user = user
         self.token = token
-        self.j = JIRA(url, basic_auth=(user, token))
+        self.j = JIRA(url, basic_auth=(user, token), options={"rest_api_version": api_version})
 
     def auth(self):
         return self.user, self.token
@@ -119,7 +119,7 @@ class JiraProject:
         issues = list(
             filter(
                 lambda i: i.fields.summary == STATE_ISSUE_SUMMARY,
-                self.j.search_issues(issue_search, maxResults=0),
+                self.j.enhanced_search_issues(issue_search, maxResults=0),
             )
         )
 
@@ -218,7 +218,7 @@ class JiraProject:
                 lambda i: i.is_managed(),
                 [
                     JiraIssue(self, raw)
-                    for raw in self.j.search_issues(issue_search, maxResults=0)
+                    for raw in self.j.enhanced_search_issues(issue_search, maxResults=0)
                 ],
             )
         )

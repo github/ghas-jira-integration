@@ -52,7 +52,7 @@ def serve(args):
         fail("No Webhook secret specified!")
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
-    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token, args.jira_api_version)
     s = Sync(
         github,
         jira.getProject(args.jira_project, args.jira_labels),
@@ -81,7 +81,7 @@ def sync(args):
         fail("No GitHub repository specified!")
 
     github = ghlib.GitHub(args.gh_url, args.gh_token)
-    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+    jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token, args.jira_api_version)
     jira_project = jira.getProject(
         args.jira_project,
         args.issue_end_state,
@@ -143,7 +143,7 @@ def install_hooks(args):
     if args.jira_url:
         if not args.jira_user or not args.jira_token:
             fail("No JIRA credentials specified!")
-        jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+        jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token, args.jira_api_version)
         jira.create_hook("github_jira_synchronization_hook", args.hook_url, args.secret)
 
 
@@ -175,7 +175,7 @@ def list_hooks(args):
         if not args.jira_user or not args.jira_token:
             fail("No JIRA credentials specified!")
 
-        jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token)
+        jira = jiralib.Jira(args.jira_url, args.jira_user, args.jira_token, args.jira_api_version)
 
         for h in jira.list_hooks():
             print(json.dumps(h, indent=4))
@@ -203,6 +203,11 @@ def main():
     )
     credential_base.add_argument("--jira-project", help="JIRA project key")
     credential_base.add_argument("--jira-labels", help="JIRA bug label(s)")
+    credential_base.add_argument(
+        "--jira-api-version",
+        help="JIRA REST API version (default: 3). Use '2' for Jira Server/Data Center.",
+        default=os.getenv("GH2JIRA_JIRA_API_VERSION", "3"),
+    )
     credential_base.add_argument(
         "--secret",
         help="Webhook secret. Alternatively, the GH2JIRA_SECRET may be set.",

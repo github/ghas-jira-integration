@@ -35,6 +35,10 @@ inputs:
     description: 'Custom reopen state'
     required: false
     default: 'To Do'
+  jira_api_version:
+    description: 'Jira REST API version. Use "3" for Jira Cloud (default), "2" for Jira Server/Data Center.'
+    required: false
+    default: '3'
 runs:
   using: composite
   steps:
@@ -51,6 +55,7 @@ runs:
       INPUTS_SYNC_DIRECTION: ${{ inputs.sync_direction }}
       INPUTS_ISSUE_END_STATE: ${{ inputs.issue_end_state }}
       INPUTS_ISSUE_REOPEN_STATE: ${{ inputs.issue_reopen_state }}
+      INPUTS_JIRA_API_VERSION: ${{ inputs.jira_api_version }}
     run: |
       pip3 install pipenv
       pipenv install
@@ -68,4 +73,5 @@ runs:
         --jira-labels "$INPUTS_JIRA_LABELS" \
         --direction "$INPUTS_SYNC_DIRECTION" \
         --issue-end-state "$INPUTS_ISSUE_END_STATE" \
-        --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE"
+        --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE" \
+        --jira-api-version "$INPUTS_JIRA_API_VERSION"
