@@ -86,6 +86,26 @@ with:
   issue_reopen_state: 'red-team-followup'
 ```
 
+##### Keeping your input values secure 💯
+
+Avoid code/command injections by setting your inputs to intermediate environment variables. For example:
+
+```yaml
+env:
+  GITHUB_TOKEN: '${{ secrets.DEMO_SECRET }}'
+  JIRA_URL: '${{ secrets.JIRA_URL }}'
+  JIRA_USER: '${{ secrets.JIRA_USER }}'
+  JIRA_TOKEN: '${{ secrets.JIRA_TOKEN }}'
+  JIRA_PROJECT: '${{ secrets.JIRA_PROJECT }}'
+  JIRA_LABELS: 'red, blue'
+with:
+  github_token: '$GITHUB_TOKEN'
+  jira_url: '$JIRA_URL'
+  jira_user: '$JIRA_USER'
+  jira_token: '$JIRA_TOKEN'
+  jira_project: '$JIRA_PROJECT'
+  jira_labels: '$JIRA_LABELS'
+```
 
 ## Using the CLI's `sync` command
 
