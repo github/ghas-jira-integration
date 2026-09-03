@@ -11,7 +11,7 @@ logging-formatter-anticrlf = "~=1.2.1"
 
 [dev-packages]
 black = "~=24.10.0"
-flake8 = "~=7.1.1"
+flake8 = "~=7.3.0"
 
 [requires]
 python_version = "3"
