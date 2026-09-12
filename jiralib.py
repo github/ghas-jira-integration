@@ -45,12 +45,78 @@ ISSUE_KEY={issue_key}
 logger = logging.getLogger(__name__)
 
 
+def text_to_adf(text):
+    """
+    Convert plain text into an Atlassian Document Format (ADF) document,
+    the JSON structure the Jira Cloud REST API v3 requires for rich-text
+    fields such as `description`. A blank line starts a new paragraph
+    (multiple consecutive blank lines collapse into one); single
+    newlines become line breaks within a paragraph.
+    """
+    text = "" if text is None else str(text)
+    paragraphs = []
+
+    for block in re.split(r"\n\s*\n", text.strip("\n")) if text else [""]:
+        content = []
+        for i, line in enumerate(block.splitlines()):
+            if i > 0:
+                content.append({"type": "hardBreak"})
+            if line:
+                content.append({"type": "text", "text": line})
+        paragraphs.append({"type": "paragraph", "content": content})
+
+    return {"type": "doc", "version": 1, "content": paragraphs}
+
+
+def _as_node_dict(node):
+    """
+    Normalize an ADF node to a plain dict. Nodes come back from the `jira`
+    library as `PropertyHolder` objects (not dicts) when read from a real
+    issue, so we fall back to reading their attributes via vars().
+    """
+    if isinstance(node, dict):
+        return node
+    if hasattr(node, "__dict__"):
+        return {k: v for k, v in vars(node).items() if not k.startswith("_")}
+    return None
+
+
+def _adf_node_to_text(node):
+    node = _as_node_dict(node)
+    if node is None:
+        return ""
+    node_type = node.get("type")
+    if node_type == "text":
+        return node.get("text", "")
+    if node_type == "hardBreak":
+        return "\n"
+    return "".join(_adf_node_to_text(child) for child in node.get("content", []))
+
+
+def adf_to_text(desc):
+    """
+    Extract the plain text of a description field (the reverse of
+    text_to_adf), so it can still be parsed with regexes. Descriptions
+    come back as ADF documents from the Jira Cloud REST API v3.
+    """
+    if isinstance(desc, str) or desc is None:
+        return desc or ""
+    node = _as_node_dict(desc)
+    if node is None:
+        return ""
+    paragraphs = [_adf_node_to_text(child) for child in node.get("content", [])]
+    return "\n\n".join(paragraphs)
+
+
 class Jira:
     def __init__(self, url, user, token, api_version="3"):
         self.url = url
         self.user = user
         self.token = token
-        self.j = JIRA(url, basic_auth=(user, token), options={"rest_api_version": api_version})
+        self.api_version = str(api_version)
+        self.j = JIRA(
+            url, basic_auth=(user, token), options={"rest_api_version": api_version}
+        )
 
     def auth(self):
         return self.user, self.token
@@ -109,6 +175,12 @@ class JiraProject:
         self.endstate = endstate
         self.reopenstate = reopenstate
 
+    def format_description(self, description):
+        # Jira Cloud (API v3) requires ADF
+        if self.jira.api_version == "3":
+            return text_to_adf(description)
+        return description
+
     def get_state_issue(self, issue_key="-"):
         if issue_key != "-":
             return self.j.issue(issue_key)
@@ -127,7 +199,7 @@ class JiraProject:
             return self.j.create_issue(
                 project=self.projectkey,
                 summary=STATE_ISSUE_SUMMARY,
-                description=STATE_ISSUE_TEMPLATE,
+                description=self.format_description(STATE_ISSUE_TEMPLATE),
                 issuetype={"name": "Bug"},
                 labels=self.labels,
             )
@@ -181,14 +253,16 @@ class JiraProject:
             summary="{prefix} {short_desc} in {repo}".format(
                 prefix=TITLE_PREFIXES[alert_type], short_desc=short_desc, repo=repo_id
             ),
-            description=DESC_TEMPLATE.format(
-                long_desc=long_desc,
-                alert_url=alert_url,
-                repo_id=repo_id,
-                alert_type=alert_type,
-                alert_num=alert_num,
-                repo_key=repo_key,
-                alert_key=alert_key,
+            description=self.format_description(
+                DESC_TEMPLATE.format(
+                    long_desc=long_desc,
+                    alert_url=alert_url,
+                    repo_id=repo_id,
+                    alert_type=alert_type,
+                    alert_num=alert_num,
+                    repo_key=repo_key,
+                    alert_key=alert_key,
+                )
             ),
             issuetype={"name": "Bug"},
             labels=self.labels,
@@ -313,7 +387,8 @@ def parse_alert_info(desc):
     them as a tuple. If parsing fails for one of the fields,
     return a tuple of None's.
     """
-    failed = None, None, None, None
+    desc = adf_to_text(desc)
+    failed = None, None, None, None, None
     m = re.search("REPOSITORY_NAME=(.*)$", desc, re.MULTILINE)
     if m is None:
         return failed
