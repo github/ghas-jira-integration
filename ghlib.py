@@ -261,6 +261,9 @@ class AlertBase:
     def hyperlink(self):
         return self.json["html_url"]
 
+    def severity(self):
+        return None
+
     def can_transition(self):
         return True
 
@@ -294,6 +297,13 @@ class Alert(AlertBase):
 
     def short_desc(self):
         return self.json["rule"]["id"]
+
+    def severity(self):
+        # Prefer security_severity_level (low/medium/high/critical), set for
+        # security rules; fall back to severity (note/warning/error).
+        rule = self.json["rule"]
+        severity = rule.get("security_severity_level") or rule.get("severity")
+        return None if severity in (None, "none") else severity
 
     def get_key(self):
         return util.make_key(self.github_repo.repo_id + "/" + str(self.number()))

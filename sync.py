@@ -63,6 +63,7 @@ class Sync:
                 alert.number(),
                 alert.github_repo.get_key(),
                 alert.get_key(),
+                alert.severity(),
             )
             newissue.adjust_state(alert.get_state())
             return alert.get_state()
@@ -89,12 +90,12 @@ class Sync:
             # we have to push back the state to JIRA, because "fixed"
             # alerts cannot be transitioned to "open"
             issue.adjust_state(alert.get_state())
-            issue.persist_labels(self.labels)
+            issue.persist_labels(alert.severity())
             return alert.get_state()
         else:
             # The user treats JIRA as the source of truth
             alert.adjust_state(issue.get_state())
-            issue.persist_labels(self.labels)
+            issue.persist_labels(alert.severity())
             return issue.get_state()
 
     def sync_repo(self, repo_id, states=None):
