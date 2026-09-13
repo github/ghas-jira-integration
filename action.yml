@@ -74,5 +74,4 @@ runs:
         --direction "$INPUTS_SYNC_DIRECTION" \
         --issue-end-state "$INPUTS_ISSUE_END_STATE" \
         --issue-reopen-state "$INPUTS_ISSUE_REOPEN_STATE" \
-        --state-issue "-" \
         --jira-api-version "$INPUTS_JIRA_API_VERSION"
