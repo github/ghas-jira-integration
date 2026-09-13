@@ -1,4 +1,5 @@
 from jira import JIRA
+import io
 import re
 import util
 import logging
@@ -98,6 +99,11 @@ class Jira:
         resp.raise_for_status()
 
         return resp.json()
+
+    def attach_file(self, issue_key, filename, content):
+        content = content if isinstance(content, bytes) else content.encode("utf-8")
+        with io.BytesIO(content) as data:
+            return self.j.add_attachment(issue_key, data, filename=filename)
 
 
 class JiraProject:
