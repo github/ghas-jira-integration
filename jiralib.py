@@ -16,6 +16,8 @@ TITLE_PREFIXES = {
     "Secret": "[Secret Scanning Alert]:",
 }
 
+SEVERITY_LABEL_PREFIX = "severity-"
+
 DESC_TEMPLATE = """
 {long_desc}
 
@@ -175,6 +177,7 @@ class JiraProject:
         alert_num,
         repo_key,
         alert_key,
+        severity=None,
     ):
         raw = self.j.create_issue(
             project=self.projectkey,
@@ -191,7 +194,7 @@ class JiraProject:
                 alert_key=alert_key,
             ),
             issuetype={"name": "Bug"},
-            labels=self.labels,
+            labels=self.labels + severity_labels(severity),
         )
         logger.info(
             "Created issue {issue_key} for alert {alert_num} in {repo_id}.".format(
@@ -302,9 +305,19 @@ class JiraIssue:
             )
         )
 
-    def persist_labels(self, labels):
-        if labels:
-            self.rawissue.update(fields={"labels": self.labels})
+    def persist_labels(self, severity=None):
+        # Keep labels added in Jira, but replace a stale severity label.
+        current = self.rawissue.fields.labels
+        managed_severity_labels = {
+            SEVERITY_LABEL_PREFIX + value
+            for value in ("critical", "high", "medium", "low", "error", "warning", "note")
+        }
+        labels = [label for label in current if label not in managed_severity_labels]
+        for label in self.labels + severity_labels(severity):
+            if label not in labels:
+                labels.append(label)
+        if set(labels) != set(current):
+            self.rawissue.update(fields={"labels": labels})
 
 
 def parse_alert_info(desc):
@@ -343,3 +356,7 @@ def parse_alert_info(desc):
 
 def repo_id_to_fname(repo_id):
     return repo_id.replace("/", "^") + ".json"
+
+
+def severity_labels(severity):
+    return [SEVERITY_LABEL_PREFIX + severity] if severity else []
