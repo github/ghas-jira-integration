@@ -308,9 +308,11 @@ class JiraIssue:
     def persist_labels(self, severity=None):
         # Keep labels added in Jira, but replace a stale severity label.
         current = self.rawissue.fields.labels
-        labels = [
-            label for label in current if not label.startswith(SEVERITY_LABEL_PREFIX)
-        ]
+        managed_severity_labels = {
+            SEVERITY_LABEL_PREFIX + value
+            for value in ("critical", "high", "medium", "low", "error", "warning", "note")
+        }
+        labels = [label for label in current if label not in managed_severity_labels]
         for label in self.labels + severity_labels(severity):
             if label not in labels:
                 labels.append(label)
