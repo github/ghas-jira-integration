@@ -70,14 +70,14 @@ Secret scanning alerts can only be queried with the API in private repositories.
 #### Other optional features for this Action
 
 ##### Labels
-You can also create labels for the Jira issues that are created. By using the example yaml below in your workflow, you can use multiple labels, and spaces will be respected. For example, if you add `red-team, blue team`, the labels would be created 'red-team' and 'blue team'. If labels are added to this input, the existing Jira issues will also be updated with them. Labels removed from the input, or added by hand in Jira, are left on existing issues.
+You can create labels for the Jira issues that are created. By using the example YAML below in your workflow, you can use multiple labels. Spaces will be respected. For example, if you add `red-team, blue team`, the labels would be created 'red-team' and 'blue team'. If labels are added to this input, the existing Jira issues will also be updated with them. Labels removed from the input, or added by hand in Jira, are left on existing issues.
 
 ```yaml
 with:
   jira_labels: 'red-team,blue-team,green-team'
 ```
 
-Issues for code scanning alerts also get a severity label, taken from the alert's rule. If the rule has a security severity level, the label is `severity-critical`, `severity-high`, `severity-medium` or `severity-low`. Otherwise it's `severity-error`, `severity-warning` or `severity-note`. The label is kept up to date if the alert's severity changes. Secret scanning alerts have no severity and get no label.
+Issues for GHAS Code scanning alerts get a severity label, taken from the alert's rule. If the rule has a security severity level, the label is `severity-critical`, `severity-high`, `severity-medium` or `severity-low`. Otherwise it's `severity-error`, `severity-warning` or `severity-note`. The label is kept up to date if the alert's severity changes. Secret scanning alerts have no severity and get no label.
 
 ##### Custom transition states (end, reopen)
 You can customize the end and reopen states if your Jira workflows don't use the default close/reopen states.
