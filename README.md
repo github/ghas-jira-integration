@@ -191,6 +191,15 @@ This will enable two-way integration between GitHub and Jira. Note: Instead of t
  
 </details>
 
+## Running tests
+
+Install the dev dependencies and run the test suite with `pipenv`:
+
+```bash
+pipenv install --dev
+pipenv run pytest
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md)
