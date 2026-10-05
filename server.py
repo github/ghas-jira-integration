@@ -28,8 +28,6 @@ def run_server(
 
 
 def auth_is_valid(signature, request_body):
-    if app.debug:
-        return True
     return hmac.compare_digest(
         signature.encode("utf-8"),
         ("sha256=" + hmac.new(secret, request_body, hashlib.sha256).hexdigest()).encode(
